@@ -70,16 +70,6 @@ class ParentModel(nn.Module):
         self.schedular_step_size = step_size
         self.schedular_gamma = gamma
         self.eigenregularization_weight = init_value
-        # if self.field_type == "far":
-        #     self.eigenregularization_weight /= 50
-        #     self.schedular_gamma = 0.5
-        # if self.system_model.params.M is not None:
-        #     self.eigenregularization_weight /= 2
-        # if self.system_model.params.snr is not None:
-        #     if self.system_model.params.snr < 0:
-        #         self.eigenregularization_weight *= abs(self.system_model.params.snr)
-        #     elif self.system_model.params.snr > 0:
-        #         self.eigenregularization_weight /= self.system_model.params.snr
 
         self.schedular_acc_current = 0
         self.schedular_patience_ascending = 5

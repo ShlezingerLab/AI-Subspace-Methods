@@ -102,4 +102,7 @@ class RMSPELoss(nn.Module):
         self.balance_factor = 0.1
 
     def __str__(self):
-        return "rmspe"
+        return "RMSPELoss"
+
+    def __repr__(self):
+        return "RMSPELoss(balance_factor={})".format(self.balance_factor.item())

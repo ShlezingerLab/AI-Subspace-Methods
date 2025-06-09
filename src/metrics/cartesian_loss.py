@@ -5,6 +5,10 @@ from src.config import device
 
 class CartesianLoss(nn.Module):
     def __init__(self):
+        """
+        Cartesian Loss for comparing predicted and true coordinates in Cartesian space.
+        This loss function computes the Cartesian distance between predicted and true coordinates, assuming permutation invariance.
+        """
         super(CartesianLoss, self).__init__()
         self.device = device
 
@@ -49,4 +53,7 @@ class CartesianLoss(nn.Module):
         return mean_cartesian_distance[0]
 
     def __str__(self):
-        return "rmspe"
+        return "Cartesian RMSPE Loss"
+
+    def __repr__(self):
+        return "CartesianLoss()"

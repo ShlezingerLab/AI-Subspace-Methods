@@ -53,7 +53,7 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
 
     """
     now = datetime.now()
-    base_plot_path = Path(__file__).parent.parent / "data" / "simulations" / "results" / "plots"
+    base_plot_path = Path(__file__).parent.parent / "plots" / "simulations"
     snr_plot_path = base_plot_path / "SNR"
     snapshots_plot_path = base_plot_path / "Snapshots"
     steering_noise_plot_path = base_plot_path / "SteeringNoise"

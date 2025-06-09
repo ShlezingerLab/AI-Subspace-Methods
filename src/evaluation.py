@@ -380,24 +380,24 @@ def evaluate_crb(dataset: DataLoader,
 
                 # Calculate the CCRB for the angles
                 tmc_ccrb_angle = calc_angles_ccrb_near_field(angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
-                ccrb_angle += torch.mean(torch.sqrt(tmc_ccrb_angle)).item()
+                ccrb_angle += torch.mean(tmc_ccrb_angle).item()
                 # Calculate the CCRB for the distances
                 tmp_ccrb_distance = calc_distances_ccrb_near_field(distances, angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
-                ccrb_distance += torch.mean(torch.sqrt(tmp_ccrb_distance)).item()
+                ccrb_distance += torch.mean(tmp_ccrb_distance).item()
 
-            if mode == "cartesian":
-                # Need to calculate the cross term as well, and change coordinates.
-                ccrb_cross = calc_cross_ccrb_near_field(distances, angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
-                tmp_ccrb_cartesian = calc_cartesian_ccrb_near_field(tmc_ccrb_angle, tmp_ccrb_distance, ccrb_cross, angles, distances)
-                ccrb_cartesian += torch.mean(torch.sqrt(tmp_ccrb_cartesian)).item()
+                if mode == "cartesian":
+                    # Need to calculate the cross term as well, and change coordinates.
+                    ccrb_cross = calc_cross_ccrb_near_field(distances, angles, linear_snr, T, N, params.wavelength, params.wavelength / 2)
+                    tmp_ccrb_cartesian = calc_cartesian_ccrb_near_field(tmc_ccrb_angle, tmp_ccrb_distance, ccrb_cross, angles, distances)
+                    ccrb_cartesian += torch.mean(tmp_ccrb_cartesian).item()
             ccrb_angle /= len(dataset)
             ccrb_distance /= len(dataset)
             if mode == "cartesian":
                 ccrb_cartesian /= len(dataset)
 
-            return {"Overall": ccrb_cartesian,
-                    "Angle": ccrb_angle,
-                    "Distance": ccrb_distance}
+            return {"Overall": np.sqrt(ccrb_cartesian),
+                    "Angle": np.sqrt(ccrb_angle),
+                    "Distance": np.sqrt(ccrb_distance)}
         else:
             print("UCRB calculation for the coherent is not supported yet")
     else:
@@ -418,26 +418,30 @@ def calc_distances_ccrb_near_field(distances, angles, snr, T, N, wavelength, sen
     num += 30 * sensor_distance * distances * (N - 1) * torch.sin(angles)
     num += sensor_distance ** 2 * (8 * N - 11) * (2 * N - 1) * torch.sin(angles) ** 2
     res *= num
-    res /= N ** 2 * (N ** 2 - 1) * (N ** 2 - 4) * torch.cos(angles) ** 4
+    res /= N * (N ** 2 - 1) * (N ** 2 - 4) * torch.cos(angles) ** 4
     return res
 
 def calc_cross_ccrb_near_field(distances, angles, snr, T, N, wavelength, sensor_distance):
     ccrb_cross = -3 * wavelength ** 2 * distances
-    ccrb_cross /= snr * T * np.pi ** 2 * (wavelength / 2) ** 3
-    ccrb_cross *= 15 * distances * (N - 1) + (wavelength / 2) * (8 * N - 11) * (2 * N - 1) * torch.sin(angles)
+    ccrb_cross /= snr * T * np.pi ** 2 * sensor_distance ** 3
+    ccrb_cross *= 15 * distances * (N - 1) + sensor_distance * (8 * N - 11) * (2 * N - 1) * torch.sin(angles)
     ccrb_cross /= N * (N ** 2 - 1) * (N ** 2 - 4) * torch.cos(angles) ** 3
     return ccrb_cross
 
 def calc_cartesian_ccrb_near_field(ccrb_angle, ccrb_distance, ccrb_cross, angles, distances):
     ccrb_cartesian = 0.0
     for m in range(angles.shape[-1]):
-        ccrb_polar = torch.zeros(angles.shape[0], 2, 2).to(device).to(torch.float32)
-        ccrb_polar[:, 0, 0] = ccrb_angle[:, m]
-        ccrb_polar[:, 1, 1] = ccrb_distance[:, m]
-        ccrb_polar[:, 0, 1] = ccrb_cross[:, m]
-        ccrb_polar[:, 1, 0] = -ccrb_cross[:, m]
-        ccrb_cartesian += transform_polar_ccrb_to_cartesian(ccrb_polar, angles[:, m], distances[:, m]) / angles.shape[
-            -1]
+        # ccrb_polar = torch.zeros(angles.shape[0], 2, 2).to(device).to(torch.float32)
+        # ccrb_polar[:, 0, 0] = ccrb_angle[:, m]
+        # ccrb_polar[:, 1, 1] = ccrb_distance[:, m]
+        # ccrb_polar[:, 0, 1] = ccrb_cross[:, m]
+        # ccrb_polar[:, 1, 0] = -ccrb_cross[:, m]
+        # ccrb_cartesian += transform_polar_ccrb_to_cartesian(ccrb_polar, angles[:, m], distances[:, m]) / angles.shape[
+        #     -1]
+        ccrb_cartesian += ccrb_distance[:, m] + ccrb_angle[:, m] * distances[:, m] ** 2 
+        # ccrb_cartesian += ccrb_distance[:, m] + ccrb_angle[:, m] * distances[:, m] ** 2
+        # ccrb_cartesian += ccrb_cross[:, m] * distances[:, m] * torch.sin(2 * angles[:, m])
+    ccrb_cartesian /= angles.shape[-1]
     return ccrb_cartesian
 
 def transform_polar_ccrb_to_cartesian(ccrb, angles, distances):

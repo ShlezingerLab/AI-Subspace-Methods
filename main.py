@@ -34,33 +34,33 @@ plt.close("all")
 # if you want to run the simulation with different parameters, you can uncomment the following lines and set the values
 scenario_dict = {
     # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [10, 20, 30, 50, 70, 100],
+    # "T": [20, 30, 40, 50, 60],
     # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
     # "M": [2, 3, 4, 5, 6, 7],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False, # if true, the logs will be saved to a file
-    "CREATE_DATA": True, # if true, a new dataset will be created
-    "SAVE_DATASET": False, # if true, the dataset will be saved to a file
+    "CREATE_DATA": False, # if true, a new dataset will be created
+    "SAVE_DATASET": True, # if true, the dataset will be saved to a file
     "LOAD_MODEL": False, # if true, the model will be loaded from a file
     "TRAIN_MODEL": True, # if true, the model will be trained
-    "SAVE_MODEL": False, # if true, the model will be saved to a file
+    "SAVE_MODEL": True, # if true, the model will be saved to a file
     "EVALUATE_MODE": True, # if true, a test will be performed
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
-    "SAVE_PLOTS": False,  # if True, the plots will be saved to the results folder
+    "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": (2, 7),  # number of sources
+    "M": (2, 8),  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 10,  # if defined, values in scenario_dict will be ignored
+    "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
@@ -98,11 +98,11 @@ elif model_config.get("model_type") == "DeepCNN":
     model_config["model_params"]["grid_size"] = 361
 
 training_params = {
-    "samples_size": 4000,
-    "train_test_ratio": 0.1,
+    "samples_size": 40000,
+    "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 32,
-    "epochs": 10,
+    "epochs": 100,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -125,7 +125,7 @@ evaluation_params = {
         #             "model_name": "DCD-MUSIC",
         #             "tau": 8,
         #             "diff_method": ("esprit", "music_1d"),
-        #             "regularization": None,
+        #             "regularization": "threshold",
         #               },
         #  "DCD-MUSIC_V2": {
         #             "model_name": "DCD-MUSIC",
@@ -140,7 +140,8 @@ evaluation_params = {
         #                 "diff_method": "music_2D",
         #                 "train_loss_type": "music_spectrum",
         #                 "field_type": "near",
-        #                 "regularization": None,
+        #                 "regularization": "aic",
+        #                 "skip_connection": True,
         #                 },
         # "NFSubspaceNet_V2": {
         #                 "model_name": "SubspaceNet",
@@ -160,7 +161,7 @@ evaluation_params = {
     "subspace_methods": [
         # "CCRB",
          "2D-MUSIC",
-        #  "Beamformer",
+         "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
         # "1D-MUSIC",
@@ -183,7 +184,7 @@ def parse_arguments():
     parser.add_argument('-wav', '--wavelength', type=float, help='Wavelength of the signal in meters', default=None)
 
     parser.add_argument('-mt', '--model_type', type=str, help='Model type; SubspaceNet, DCD-MUSIC, DeepCNN, TransMUSIC, DR_MUSIC', default=None)
-    parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=model_config["model_params"]["regularization"])
+    parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=model_config["model_params"].get("regularization"))
     parser.add_argument('-tau', '--tau', type=int, help='Tau value for SubspaceNet or DCD-MUSIC', default=model_config["model_params"].get("tau"))
     parser.add_argument("-v", "--variant", type=str, help="Variant of the SubspaceNet model; big, small", default=model_config["model_params"].get("variant"))
 

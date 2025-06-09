@@ -18,17 +18,17 @@ from src.models import ModelGenerator
 # default values for the argparse
 number_sensors = 15
 number_sources = "2"
-number_snapshots = 100
-snr = 10
+number_snapshots = 10
+snr = 0
 field_type = "Near"
 signal_type = "narrowband"
-signal_nature = "non-coherent"
+signal_nature = "coherent"
 err_loc_sv = 0.0
 wavelength = 1
 tau = 8
-sample_size = 4000
+sample_size = 4096
 batch_size = 32
-epochs = 10
+epochs = 100
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.001
@@ -37,13 +37,17 @@ step_size = 10
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
 train_loss_type = ("rmspe", "rmspe")
-regularization = None
+regularization = "threshold"
 variant = "small"
 wandb_flag = False
 skip_first_step = False
 skip_second_step = False
+initialize_eigenregularization_weight = 1e-2  # initial value for eigenregularization weight
 
 def train_dcd_music(*args, **kwargs):
+    # Initialize seed
+    set_unified_seed()
+
     SIMULATION_COMMANDS = kwargs["simulation_commands"]
     SYSTEM_MODEL_PARAMS = kwargs["system_model_params"]
     MODEL_PARAMS = kwargs["model_params"]
@@ -59,11 +63,9 @@ def train_dcd_music(*args, **kwargs):
     now = datetime.now()
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
 
-    # Initialize seed
-    set_unified_seed()
 
     # Initialize paths
-    datasets_path, simulations_path = initialize_data_paths(Path(__file__).parent / "data")
+    datasets_path, simulations_path = initialize_data_paths(Path(__file__).parent)
 
     # Saving simulation scores to external file
     suffix = ""
@@ -137,7 +139,8 @@ def train_dcd_music(*args, **kwargs):
     model_config.set_model_params({"tau": MODEL_PARAMS.get("tau"),
                                    "diff_method": diff_method,
                                    "regularization": MODEL_PARAMS.get("regularization"),
-                                   "variant": MODEL_PARAMS.get("variant")})
+                                   "variant": MODEL_PARAMS.get("variant"),
+                                   "initialize_eigenregularization_weight": MODEL_PARAMS.get("initialize_eigenregularization_weight", 1e-1),})
     model_config.set_model()
     model_config.model.switch_train_mode()
     # model_config.model.update_train_mode("angle")
@@ -239,7 +242,8 @@ if __name__ == "__main__":
     model_params = {
         "tau": args.tau,
         "regularization": None if args.regularization == "None" else args.regularization,
-        "variant": args.variant
+        "variant": args.variant,
+        "initialize_eigenregularization_weight": initialize_eigenregularization_weight,  # initial value for eigenregularization weight
     }
     training_params = {
         "samples_size": args.sample_size,

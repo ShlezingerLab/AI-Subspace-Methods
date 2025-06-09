@@ -203,7 +203,7 @@ class Trainer:
         # Training complete
         self.__train_summary(since)
         self.__plot_res()
-        self.__save_final_model(save_final)
+        self.__save_final_model(save_final and epochs > 0)
         # close wandb connection
         self.__finish_wandb()
         return self.model
@@ -276,12 +276,13 @@ class Trainer:
                 return None
 
             # don't load angle extractor weights
-            if isinstance(self.model, DCDMUSIC):
-                state_dict = {k: v for k, v in state_dict.items() if not k.startswith("angle_extractor")}
-                model_dict = self.model.state_dict()
-                model_dict.update(state_dict)
-            else:
-                model_dict = state_dict
+            # if isinstance(self.model, DCDMUSIC):
+            #     state_dict = {k: v for k, v in state_dict.items() if not k.startswith("angle_extractor")}
+            #     model_dict = self.model.state_dict()
+            #     model_dict.update(state_dict)
+            # else:
+            #     model_dict = state_dict
+            model_dict = state_dict
 
             try:
                 self.model.load_state_dict(model_dict)
@@ -325,7 +326,7 @@ class Trainer:
         self.root_path = Path(__file__).parent.parent
         self.checkpoint_path = self.root_path / "data" / "weights" / self.model._get_name()
         self.simulation_path = self.root_path / "data" / "simulations"
-        self.plots_path = self.root_path / "data" / "simulations" / "plots"
+        self.plots_path = self.root_path / "plots" / "train" / self.model._get_name()
         self.scores_path = self.root_path / "data" / "simulations" / "scores"
         self.final_model_checkpoint = self.checkpoint_path / "final_models" / self.model.get_model_file_name()
         self.__verify_paths()

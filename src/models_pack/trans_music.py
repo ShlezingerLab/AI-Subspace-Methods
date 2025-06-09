@@ -280,6 +280,7 @@ class TransMUSIC(ParentModel):
             angles_pred = angles_pred[:, :angles.shape[1]]
             ranges_pred = ranges_pred[:, :ranges.shape[1]]
             loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+        loss = torch.sum(loss)  # Sum the loss over the batch
         source_estimation = torch.argmax(prob_source_number, dim=1)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
         return loss, acc, None

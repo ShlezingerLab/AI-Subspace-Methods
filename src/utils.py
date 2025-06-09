@@ -525,6 +525,9 @@ class AntiRectifier(nn.Module):
 
     def forward(self, x):
         return torch.cat((self.relu(x), self.relu(-x)), 1)
+    
+    def __repr__(self):
+        return "AntiRectifier()"
 
 class L2NormLayer(nn.Module):
     def __init__(self, dim=(1, 2), eps=1e-8):
@@ -536,6 +539,9 @@ class L2NormLayer(nn.Module):
         return torch.nn.functional.normalize(x, p=2, dim=self.dim, eps=self.eps)
         # norm = torch.sqrt(torch.norm(x, p=2, dim=self.dim, keepdim=True)) + self.eps
         # return x / norm
+    
+    def __repr__(self):
+        return f"L2NormLayer(dim={self.dim}, eps={self.eps})"
 
 class TraceNorm(nn.Module):
     def __init__(self, eps=1e-8):
@@ -547,6 +553,9 @@ class TraceNorm(nn.Module):
         trace = trace.view(-1, 1, 1)
         return Rz / trace
 
+    def __repr__(self):
+        return f"TraceNorm(eps={self.eps})"
+    
 class LearnableSkipConnection(nn.Module):
     def __init__(self, alpha: float = 0.0):
         """Initializes the learnable skip connection.
@@ -562,6 +571,19 @@ class LearnableSkipConnection(nn.Module):
     def __repr__(self):
         return f"LearnableSkipConnection(alpha={self.alpha.item()})"
 
+class MultipleInputIdentity(nn.Module):
+    """
+    A module that given multiple inputs, returns the first input as output.
+    """
+    def __init__(self):
+        """Initializes the MultipleInputIdentity module."""
+        super(MultipleInputIdentity, self).__init__()
+
+    def forward(self, *inputs):
+        return inputs[0]
+
+    def __repr__(self):
+        return "MultipleInputIdentity()"    
 
 if __name__ == "__main__":
     # sum_of_diag example

@@ -21,7 +21,7 @@ class SubspaceMethod(nn.Module):
         super(SubspaceMethod, self).__init__()
         self.device = device
         self.system_model = system_model
-        self.eigen_threshold = nn.Parameter(torch.tensor(.5, requires_grad=False))
+        self.eigen_threshold = torch.tensor(.5, requires_grad=False)
         self.normalized_eigenvals = None
         self.normalized_eigenvals_mean = None
         self.model_order_estimation = model_order_estimation

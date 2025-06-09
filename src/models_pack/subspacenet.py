@@ -8,7 +8,7 @@ import torch.nn as nn
 from src.metrics import RMSPELoss, CartesianLoss, MusicSpectrumLoss
 from src.models_pack.parent_model import ParentModel
 from src.system_model import SystemModel
-from src.utils import gram_diagonal_overload, validate_constant_sources_number, L2NormLayer, AntiRectifier, TraceNorm, LearnableSkipConnection
+from src.utils import gram_diagonal_overload, validate_constant_sources_number, L2NormLayer, AntiRectifier, TraceNorm, LearnableSkipConnection, MultipleInputIdentity
 
 from src.methods_pack.music import MUSIC
 from src.methods_pack.esprit import ESPRIT
@@ -19,7 +19,8 @@ from src.methods_pack.beamformer import Beamformer
 class SubspaceNet(ParentModel):
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
                  system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small",
-                  norm_layer: bool=True, psd_epsilon: float=.01, batch_norm: bool=False, skip_connection: bool=False):
+                  norm_layer: bool=True, psd_epsilon: float=.01, batch_norm: bool=False, skip_connection: bool=False,
+                  use_eigenregularization: bool = True, initialize_eigenregularization_weight: float = 1e-3):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -55,7 +56,7 @@ class SubspaceNet(ParentModel):
         self.deconv4 = nn.ConvTranspose2d(32, 1, kernel_size=2)
         self.drop_out = nn.Dropout(self.p)
         self.antirectifier = AntiRectifier()
-        self.skip_connection = nn.Identity() # initialize as identity, set up in the __setup_skip_connection
+        self.skip_connection = MultipleInputIdentity() # initialize as identity, set up in the __setup_skip_connection
         
         self.__setup_model_variant(variant)
         self.__setup_norm_layer(norm_layer)
@@ -66,7 +67,8 @@ class SubspaceNet(ParentModel):
         self.train_loss, self.validation_loss, self.test_loss, self.test_loss_separated = None, None, None, None
         self.__set_criterion(train_loss_type)
         self.__set_diff_method(diff_method, system_model)
-        self.set_eigenregularization_schedular()
+        if use_eigenregularization:
+            self.set_eigenregularization_schedular(init_value=initialize_eigenregularization_weight)
 
     def get_surrogate_covariance(self, x: torch.Tensor):
         """
@@ -81,7 +83,7 @@ class SubspaceNet(ParentModel):
         x0 = self.pre_processing(x)
         # Rx_tau shape: [Batch size, tau, 2N, N]
         # N = x.shape[-1]
-        batch_size, _, _, N = x0.shape
+        _, _, _, N = x0.shape
         empirical_cov = torch.complex(x0[:, 0,:N], x0[:, 0, N:])
         ############################
         ## Architecture flow ##
@@ -120,7 +122,6 @@ class SubspaceNet(ParentModel):
         Kx_tag = self.norm_layer(Kx_tag)
         Rz = gram_diagonal_overload(Kx=Kx_tag, eps=eps) # Shape: [Batch size, N, N]
         Rz = self.skip_connection(Rz, empirical_cov) # Shape: [Batch size, N, N]
-        # Feed surrogate covariance to the differentiable subspace algorithm
         # Rz = self.norm_layer(Rz)
         return Rz
 
@@ -239,7 +240,7 @@ class SubspaceNet(ParentModel):
 
     def __setup_skip_connection(self, skip_connection: bool):
         if skip_connection:
-            self.skip_connection = LearnableSkipConnection(alpha=0.0)
+            self.skip_connection = LearnableSkipConnection(alpha=1e-1 if self.system_model.params.signal_nature == "non-coherent" else 1e-4)
 
     def __setup_model_variant(self, variant: str):
         if variant in ["big", "V2"]:
@@ -304,7 +305,7 @@ class SubspaceNet(ParentModel):
         return self.reshaper
 
     def adjust_diff_method_temperature(self, epoch):
-        if isinstance(self.diff_method, MUSIC) and isinstance(self.train_loss, RMSPELoss):
+        if isinstance(self.diff_method, MUSIC) and isinstance(self.train_loss, (RMSPELoss, CartesianLoss)):
             if epoch % 20 == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")

@@ -21,7 +21,8 @@ class DCDMUSIC(ParentModel):
     def __init__(self, system_model: SystemModel, tau: int, diff_method: tuple = ("esprit", "music_1d"),
                  regularization: str = None, variant: str = "small",
                  norm_layer: bool = True, batch_norm: bool = False, psd_epsilon: float = 1e-6,
-                 load_angle_branch: bool = False, angle_extractor: SubspaceNet = None, load_range_branch: bool = False):
+                 load_angle_branch: bool = False, angle_extractor: SubspaceNet = None, load_range_branch: bool = False,
+                 initialize_eigenregularization_weight: float = 1e-1):
         super(DCDMUSIC, self).__init__(system_model)
         self.tau = tau
         self.regularization = regularization
@@ -30,7 +31,7 @@ class DCDMUSIC(ParentModel):
         self.batch_norm = batch_norm
         self.variant = variant
         self.angle_branch, self.range_branch = None, None # Holders for the angle and range branches
-        self.__init_angle_branch(load_angle_branch, diff_method[0]) if angle_extractor is None else angle_extractor
+        self.__init_angle_branch(load_angle_branch, diff_method[0], initialize_eigenregularization_weight) if angle_extractor is None else angle_extractor
         self.__init_range_branch(load_range_branch, diff_method[1])
         self.train_mode = "position" # Default to position mode
         # self.update_train_mode("angle") # "angle", "range" or "position"
@@ -150,18 +151,18 @@ class DCDMUSIC(ParentModel):
         if isinstance(self.range_branch.diff_method, MUSIC) and isinstance(self.train_loss, RMSPELoss):
             self.range_branch.diff_method.init_cells(init_cell_size)
 
-    def __init_angle_branch(self, load_state: bool, diff_method: str):
+    def __init_angle_branch(self, load_state: bool, diff_method: str, initialize_eigenregularization_weight: float):
         self.angle_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
                             system_model=self.system_model, field_type="far", regularization=self.regularization,
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
-                            psd_epsilon=self.psd_epsilon)
+                            psd_epsilon=self.psd_epsilon, initialize_eigenregularization_weight=initialize_eigenregularization_weight)
         self.load_angle_branch(load_state)
 
     def __init_range_branch(self, load_state: bool, diff_method: str):
         self.range_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
                             system_model=self.system_model, field_type="near", regularization=None,
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
-                            psd_epsilon=self.psd_epsilon)
+                            psd_epsilon=self.psd_epsilon, use_eigenregularization=False)
         self.load_range_branch(load_state)
 
     def load_angle_branch(self, load_state: bool):
@@ -283,3 +284,12 @@ class DCDMUSIC(ParentModel):
             return self.angle_branch.eigenregularization_weight
         else:
             return None
+    
+    def adjust_diff_method_temperature(self, epoch: int):
+        if self.train_mode == "angle":
+            self.angle_branch.adjust_diff_method_temperature(epoch)
+        elif self.train_mode == "range":
+            self.range_branch.adjust_diff_method_temperature(epoch)
+        else:
+            self.angle_branch.adjust_diff_method_temperature(epoch)
+            self.range_branch.adjust_diff_method_temperature(epoch)
