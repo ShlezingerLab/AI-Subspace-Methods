@@ -43,6 +43,7 @@ plot_styles = {
     'DCD-MUSIC': {'color': 'g', 'linestyle': '-', 'marker': 'D', "markersize": 8},
     'DCD-MUSIC_V2': {'color': 'g', 'linestyle': '--', 'marker': 'd', "markersize": 8},
     'TransMUSIC': {'color': 'm', 'linestyle': '-.', 'marker': 'P', "markersize": 8},
+    'DeepCNN': {'color': 'b', 'linestyle': '-', 'marker': 'o', "markersize": 8},
     '2D-MUSIC': {'color': 'c', 'linestyle': ':', 'marker': '^', "markersize": 8},
     '2D-MUSIC(SPS)': {'color': 'c', 'linestyle': '--', 'marker': 'v', "markersize": 8},
     'SubspaceNet': {'color': 'k', 'linestyle': '-', 'marker': 'X', "markersize": 8},

@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch
 from src.system_model import SystemModel
 from src.config import device
+from src.utils import validate_constant_sources_number
 
 
 EIGEN_REGULARIZATION_WEIGHT = 1e-3
@@ -64,6 +65,28 @@ class ParentModel(nn.Module):
 
     def forward(self, x):
         raise NotImplementedError
+    
+    def prepare_batch_far_field(self, batch):
+        x, sources_num, angles = batch
+        validate_constant_sources_number(sources_num)
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        sources_num = sources_num[0]
+        return x, sources_num, angles
+
+    def prepare_batch_near_field(self, batch):
+        x, sources_num, labels = batch
+        validate_constant_sources_number(sources_num)
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        sources_num = sources_num[0]
+        angles, ranges = torch.split(labels, sources_num, dim=1)
+        x = x.to(self.device)
+        angles = angles.to(self.device)
+        ranges = ranges.to(self.device)
+        return x, sources_num, angles, ranges
 
     def set_eigenregularization_schedular(self, init_value=EIGEN_REGULARIZATION_WEIGHT, step_size=10, gamma=0.5):
         self.schedular_counter = 0

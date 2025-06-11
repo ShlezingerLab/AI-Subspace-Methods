@@ -45,7 +45,7 @@ import warnings
 
 
 # internal imports
-from src.models import (SubspaceNet, DCDMUSIC, TransMUSIC)
+from src.models import (SubspaceNet, DCDMUSIC, TransMUSIC, DeepCNN)
 from src.evaluation import evaluate_dnn_model
 
 
@@ -137,7 +137,7 @@ class Trainer:
 
 
             for idx, data in tqdm(enumerate(train_dataloader), desc=f"Training {epoch + 1}/{epochs}"):
-                if isinstance(self.model, (SubspaceNet, TransMUSIC, DCDMUSIC)):
+                if isinstance(self.model, (SubspaceNet, TransMUSIC, DCDMUSIC, DeepCNN)):
                     train_loss, acc, eigen_regularization = self.model.training_step(data, idx)
                     if isinstance(train_loss, tuple):
                         train_loss, train_loss_angle, train_loss_distance = train_loss

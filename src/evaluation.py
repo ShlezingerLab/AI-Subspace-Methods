@@ -147,7 +147,7 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
     # Gradients calculation isn't required for evaluation
     with (torch.no_grad()):
         for idx, data in enumerate(dataset):
-            if isinstance(model, (SubspaceNet, TransMUSIC, DCDMUSIC)):
+            if isinstance(model, (SubspaceNet, TransMUSIC, DCDMUSIC, DeepCNN)):
                 if mode == "valid":
                     eval_loss, acc = model.validation_step(data, idx)
                 else:
