@@ -11,10 +11,9 @@ from src.system_model import SystemModel
 from src.config import device
 
 
-
 class SubspaceMethod(nn.Module):
     """
-
+    Basic methods for all subspace methods.
     """
 
     def __init__(self, system_model: SystemModel, model_order_estimation: str = None):
