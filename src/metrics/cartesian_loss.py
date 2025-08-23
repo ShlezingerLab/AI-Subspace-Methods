@@ -53,7 +53,7 @@ class CartesianLoss(nn.Module):
         return mean_cartesian_distance[0]
 
     def __str__(self):
-        return "Cartesian RMSPE Loss"
+        return "rmspe"
 
     def __repr__(self):
         return "CartesianLoss()"

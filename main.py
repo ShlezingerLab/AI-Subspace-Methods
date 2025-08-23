@@ -6,7 +6,7 @@ of the evaluation. The results will be saved in the results folder in the projec
 
 The script can be run with the following command line arguments:
     --snr: SNR value
-    --N: Number of antennas
+    --N: Number of antennasp
     --M: Number of sources
     --field_type: Field type
     --signal_nature: Signal nature
@@ -33,9 +33,9 @@ plt.close("all")
 
 # if you want to run the simulation with different parameters, you can uncomment the following lines and set the values
 scenario_dict = {
-    # "SNR": [-10, -5, 0, 5, 10],
-    # "T": [20, 30, 40, 50, 60],
-    # "eta": [0.0, 0.01, 0.02, 0.03, 0.04],
+    "SNR": [-10, -5, 0, 5, 10],
+    # "T": [10, 20, 30, 50, 70, 100],
+    # "eta": [0.0, 0.02, 0.04, 0.06, 0.08, 0.1],
     # "M": [2, 3, 4, 5, 6, 7],
 }
 
@@ -44,7 +44,7 @@ simulation_commands = {
     "CREATE_DATA": False, # if true, a new dataset will be created
     "SAVE_DATASET": True, # if true, the dataset will be saved to a file
     "LOAD_MODEL": False, # if true, the model will be loaded from a file
-    "TRAIN_MODEL": True, # if true, the model will be trained
+    "TRAIN_MODEL": False, # if true, the model will be trained
     "SAVE_MODEL": True, # if true, the model will be saved to a file
     "EVALUATE_MODE": True, # if true, a test will be performed
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
@@ -55,9 +55,9 @@ simulation_commands = {
 
 system_model_params = {
     "N": 15,  # number of antennas
-    "M": (2, 8),  # number of sources
+    "M": (2,8),  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 0,  # if defined, values in scenario_dict will be ignored
+    "snr": 10,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
     "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
@@ -84,6 +84,7 @@ if model_config.get("model_type") == "SubspaceNet":
     model_config["model_params"]["norm_layer"] = True
     model_config["model_params"]["batch_norm"] = False
     model_config["model_params"]["skip_connection"] = True
+    model_config["model_params"]["initialize_eigenregularization_weight"] = 1e-6
 
 elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["tau"] = 8
@@ -94,15 +95,12 @@ elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["variant"] = "small"  # big, small
     model_config["model_params"]["norm_layer"] = True
 
-elif model_config.get("model_type") == "DeepCNN":
-    model_config["model_params"]["grid_size"] = 361
-
 training_params = {
     "samples_size": 40000,
     "train_test_ratio": .1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 32,
-    "epochs": 100,
+    "epochs": 0,
     "optimizer": "Adam",  # Adam, SGD
     "scheduler": "ReduceLROnPlateau",  # StepLR, ReduceLROnPlateau
     "learning_rate": 0.001,
@@ -116,42 +114,33 @@ training_params = {
     "use_wandb": False,
     "simulation_name": None,
 }
+regularization_methods = "aic" # None, aic, mdl, threshold
 evaluation_params = {
     "models": {
-        # "TransMUSIC": {
-        #                 "model_name": "TransMUSIC",
-        #             },
-        # "DCD-MUSIC": {
-        #             "model_name": "DCD-MUSIC",
-        #             "tau": 8,
-        #             "diff_method": ("esprit", "music_1d"),
-        #             "regularization": "threshold",
-        #               },
-        #  "DCD-MUSIC_V2": {
-        #             "model_name": "DCD-MUSIC",
-        #             "tau": 8,
-        #             "diff_method": ("esprit", "music_1d"),
-        #             "regularization": "aic",
-        #             "variant": "big"
-        #               },
-        # "NFSubspaceNet": {
-        #                 "model_name": "SubspaceNet",
-        #                 "tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "near",
-        #                 "regularization": "aic",
-        #                 "skip_connection": True,
-        #                 },
-        # "NFSubspaceNet_V2": {
-        #                 "model_name": "SubspaceNet",
-        #                 "tau": 8,
-        #                 "diff_method": "music_2D",
-        #                 "train_loss_type": "music_spectrum",
-        #                 "field_type": "near",
-        #                 "regularization": "aic",
-        #                 "variant": "big",
-        #                 },
+        "TransMUSIC": {
+                        "model_name": "TransMUSIC",
+                    },
+        "DeepCNN": {
+            "model_name": "DeepCNN",
+        },
+        "DCD-MUSIC": {
+                    "model_name": "DCD-MUSIC",
+                    "tau": 8,
+                    "diff_method": ("esprit", "music_1d"),
+                    "regularization": "aic",    
+                    "skip_connection": True,
+                    "psd_epsilon": 1e-6,
+                      },
+        "NFSubspaceNet": {
+                        "model_name": "SubspaceNet",
+                        "tau": 8,
+                        "diff_method": "music_2D",
+                        "train_loss_type": "music_spectrum",
+                        "field_type": "near",
+                        "regularization": "aic",
+                        "skip_connection": True,
+                        "psd_epsilon": 1e-6,
+                        },
     },
     "augmented_methods": [
         # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
@@ -160,7 +149,7 @@ evaluation_params = {
     ],
     "subspace_methods": [
         # "CCRB",
-         "2D-MUSIC",
+        "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
          "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
@@ -187,6 +176,7 @@ def parse_arguments():
     parser.add_argument('-reg', '--regularization', type=str, help='Regularization method for SubspaceNet of DCD', default=model_config["model_params"].get("regularization"))
     parser.add_argument('-tau', '--tau', type=int, help='Tau value for SubspaceNet or DCD-MUSIC', default=model_config["model_params"].get("tau"))
     parser.add_argument("-v", "--variant", type=str, help="Variant of the SubspaceNet model; big, small", default=model_config["model_params"].get("variant"))
+    parser.add_argument("-ew", "--eigenregularization_weight", type=float, help="Eigenregularization weight", default=model_config["model_params"].get("initialize_eigenregularization_weight", None))
 
     parser.add_argument('-ss', '--samples_size', type=int, help='Samples size', default=None)
     parser.add_argument('-ttr', '--train_test_ratio', type=float, help='Train test ratio', default=None)
@@ -244,6 +234,7 @@ if __name__ == "__main__":
         model_config["model_params"]["regularization"] = None if args.regularization == "None" else args.regularization
         model_config["model_params"]["tau"] = args.tau
         model_config["model_params"]["variant"] = args.variant
+        model_config["model_params"]["initialize_eigenregularization_weight"] = args.eigenregularization_weight
 
     if args.samples_size is not None:
         training_params["samples_size"] = args.samples_size

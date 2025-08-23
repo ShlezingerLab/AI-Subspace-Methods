@@ -219,7 +219,7 @@ class Samples(SystemModel):
         if self.params.signal_type.startswith("broadband"):
             raise Exception("Samples.samples_creation: Broadband signal type is not defined for far field")
         if self.params.field_type.startswith("far"):
-            A = self.steering_vec(self.angles, f_c=self.f_rng[self.params.signal_type])
+            A = self.steering_vec(self.angles, f_c=self.f_rng[self.params.signal_type], nominal=False)
             samples = (A @ signal) + noise
         elif self.params.field_type.startswith("near"):
             A = self.steering_vec(angles=self.angles, ranges=self.distances, nominal=False, generate_search_grid=False,
@@ -282,6 +282,7 @@ class Samples(SystemModel):
         else:
             snr = self.params.snr
         amplitude = 10 ** (snr / 10)
+        # amplitude = np.sqrt(amplitude)
         # NarrowBand signal creation
         if self.params.signal_type == "narrowband":
             if self.params.signal_nature == "non-coherent":

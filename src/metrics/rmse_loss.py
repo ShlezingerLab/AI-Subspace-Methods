@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.utils import device
+from src.config import device
 
 class RMSELoss(nn.MSELoss):
     def __init__(self, *args):

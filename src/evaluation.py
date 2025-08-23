@@ -62,15 +62,23 @@ def get_model_based_method(method_name: str, system_model_params: SystemModelPar
     an instance of the method.
     """
     system_model = SystemModel(system_model_params, nominal=True)
-    if method_name.lower().endswith("1d-music"):
-        method = MUSIC(system_model=system_model, estimation_parameter="angle", model_order_estimation="threshold")
-    elif method_name.lower().endswith("2d-music"):
-        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation="aic")
-    elif method_name.lower() == "root-music":
-        method = RootMusic(system_model)
-    elif method_name.lower().endswith("esprit"):
-        method = ESPRIT(system_model)
-    elif method_name.lower().endswith("beamformer"):
+    # extract model order estimation from method_name, which will be in the format of "1d-music(aic)" or "2d-music(aic)"
+    # first verify that the method_name is in the format of "{method_name}({model_order_estimation})"
+    if "(" in method_name:
+        method_name, model_order_estimation = method_name.split("(")
+        model_order_estimation = model_order_estimation.replace(")", "")
+    else:
+        model_order_estimation = None
+    print(f"method_name: {method_name}, model_order_estimation: {model_order_estimation if model_order_estimation else 'None'}")
+    if method_name.lower().startswith("1d-music"):
+        method = MUSIC(system_model=system_model, estimation_parameter="angle", model_order_estimation=model_order_estimation)
+    elif method_name.lower().startswith("2d-music"):
+        method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation=model_order_estimation)
+    elif method_name.lower().startswith("root-music"):
+        method = RootMusic(system_model, model_order_estimation=model_order_estimation)
+    elif method_name.lower().startswith("esprit"):
+        method = ESPRIT(system_model, model_order_estimation=model_order_estimation)
+    elif method_name.lower().startswith("beamformer"):
         method = Beamformer(system_model)
     elif method_name.lower() == "tops":
         method = TOPS(system_model)
@@ -98,7 +106,12 @@ def get_model(params: dict, system_model_params: SystemModelParams, model_name: 
     model = model_config.model
     path = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name())
     try:
-        model.load_state_dict(torch.load(path+".pt", map_location=device, weights_only=True))
+        state_dict = torch.load(path+".pt", map_location=device, weights_only=True)
+        if "model_state_dict" in state_dict:
+            state_dict = state_dict["model_state_dict"]
+        # remove all keys that ends with .eigen_threshold
+        state_dict = {k: v for k, v in state_dict.items() if not k.endswith(".eigen_threshold")}
+        model.load_state_dict(state_dict)
         print(f"get_model: {model._get_name()}'s weights loaded succesfully from {path}")
     #     if isinstance(model, DCDMUSIC):
     #         model._load_state_for_angle_extractor()
@@ -305,7 +318,13 @@ def evaluate_model_based(dataset: DataLoader, system_model_params: SystemModelPa
             result["Angle"] = angle_loss / test_length
             result["Distance"] = distance_loss / test_length
         if acc is not None:
-            result["Accuracy"] = acc / test_length
+            if hasattr(model_based, "model_order_estimation"):
+                if model_based.model_order_estimation is not None:
+                    result[f"Accuracy({model_based.model_order_estimation.upper()})"] = acc / test_length
+                else:
+                    result["Accuracy"] = acc / test_length
+            # else:
+                # result["Accuracy"] = acc / test_length
     return result
 
 
@@ -436,8 +455,7 @@ def calc_cartesian_ccrb_near_field(ccrb_angle, ccrb_distance, ccrb_cross, angles
         # ccrb_polar[:, 1, 1] = ccrb_distance[:, m]
         # ccrb_polar[:, 0, 1] = ccrb_cross[:, m]
         # ccrb_polar[:, 1, 0] = -ccrb_cross[:, m]
-        # ccrb_cartesian += transform_polar_ccrb_to_cartesian(ccrb_polar, angles[:, m], distances[:, m]) / angles.shape[
-        #     -1]
+        # ccrb_cartesian += transform_polar_ccrb_to_cartesian(ccrb_polar, angles[:, m], distances[:, m])
         ccrb_cartesian += ccrb_distance[:, m] + ccrb_angle[:, m] * distances[:, m] ** 2 
         # ccrb_cartesian += ccrb_distance[:, m] + ccrb_angle[:, m] * distances[:, m] ** 2
         # ccrb_cartesian += ccrb_cross[:, m] * distances[:, m] * torch.sin(2 * angles[:, m])
@@ -520,7 +538,7 @@ def evaluate(
     for algorithm in subspace_methods:
         start = time.time()
         loss = evaluate_model_based(generic_test_dataset, system_model_params, algorithm=algorithm)
-        if system_model_params.signal_nature == "coherent" and algorithm.lower() in ["1d-music", "2d-music", "root-music", "esprit"]:
+        if system_model_params.signal_nature == "coherent" and algorithm.lower().startswith(("1d-music", "2d-music", "root-music", "esprit")):
             algorithm += "(SPS)"
         print(f"{algorithm} evaluation time: {time.time() - start}")
         if loss is not None:

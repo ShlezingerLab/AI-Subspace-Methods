@@ -17,32 +17,32 @@ from src.models import ModelGenerator
 
 # default values for the argparse
 number_sensors = 15
-number_sources = "2"
-number_snapshots = 10
-snr = 0
+number_sources = "2,8"
+number_snapshots = 100
+snr = -10
 field_type = "Near"
 signal_type = "narrowband"
 signal_nature = "coherent"
 err_loc_sv = 0.0
 wavelength = 1
 tau = 8
-sample_size = 4096
+sample_size = 40000
 batch_size = 32
 epochs = 100
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
-learning_rate = 0.001
+learning_rate = 0.01
 weight_decay = 1e-9
 step_size = 10
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
-train_loss_type = ("rmspe", "rmspe")
-regularization = "threshold"
+regularization = "aic"
 variant = "small"
 wandb_flag = False
-skip_first_step = False
-skip_second_step = False
-initialize_eigenregularization_weight = 1e-2  # initial value for eigenregularization weight
+SKIP_FIRST_STEP = False
+SKIP_SECOND_STEP = False
+initialize_eigenregularization_weight = 1e-4  # initial value for eigenregularization weight
+skip_connection_alpha = 1e-6
 
 def train_dcd_music(*args, **kwargs):
     # Initialize seed
@@ -56,6 +56,8 @@ def train_dcd_music(*args, **kwargs):
     create_data = SIMULATION_COMMANDS["CREATE_DATA"]  # Creating new dataset
     load_model = SIMULATION_COMMANDS["LOAD_MODEL"]  # Load specific model for training
     save_model = SIMULATION_COMMANDS["SAVE_MODEL"]  # Save model after training
+    skip_first_step = kwargs.get("skip_first_step", SKIP_FIRST_STEP)
+    skip_second_step = kwargs.get("skip_second_step", SKIP_SECOND_STEP)
     load_data = not create_data  # Loading data from exist dataset
     print("Running simulation...")
     print(f"Training model - DCD-MUSIC, {'all training steps' if not skip_first_step and not skip_second_step else 'partly training'}")
@@ -140,7 +142,8 @@ def train_dcd_music(*args, **kwargs):
                                    "diff_method": diff_method,
                                    "regularization": MODEL_PARAMS.get("regularization"),
                                    "variant": MODEL_PARAMS.get("variant"),
-                                   "initialize_eigenregularization_weight": MODEL_PARAMS.get("initialize_eigenregularization_weight", 1e-1),})
+                                   "initialize_eigenregularization_weight": MODEL_PARAMS.get("initialize_eigenregularization_weight", 1e-1),
+                                   "skip_connection_alpha": skip_connection_alpha})
     model_config.set_model()
     model_config.model.switch_train_mode()
     # model_config.model.update_train_mode("angle")
@@ -159,27 +162,30 @@ def train_dcd_music(*args, **kwargs):
     trainer = Trainer(model=model_config.model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                           use_wandb=TRAINING_PARAMS["use_wandb"],
-                          save_final=save_model, load_model=load_model)
+                          save_final=save_model, load_model=load_model if not skip_first_step else True)
 
     print("END OF TRAINING - Step 1: angle branch training.")
 
     # Update model configuration
     model.switch_train_mode()
     # Assign the training parameters object
-    trainingparams.update({"training_objective": "range"})
+    trainingparams.update({"training_objective": "range",
+                            "learning_rate": TRAINING_PARAMS["learning_rate"]})
     trainingparams.update({"epochs": 0 if skip_second_step else TRAINING_PARAMS["epochs"]})
+    model.init_model_train_params(init_cell_size=0.2)   
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
-                            save_final=save_model, load_model= load_model)
+                            save_final=save_model, load_model= load_model if not skip_second_step else True)
 
     print("END OF TRAINING - Step 2: distance branch training.")
 
     # Assign the training parameters object
     trainingparams.update({"training_objective": "angle, range",
-                           "learning_rate": TRAINING_PARAMS["learning_rate"]})
+                           "learning_rate": TRAINING_PARAMS["learning_rate"] / 50})
     trainingparams.update({"epochs": TRAINING_PARAMS["epochs"]})
-    model.init_model_train_params(init_eigenregularization_weight=1e-3, init_cell_size=0.2)
+    model.init_model_train_params(init_eigenregularization_weight=initialize_eigenregularization_weight * 10,
+                                   init_cell_size=0.2)
     model.switch_train_mode()
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
@@ -205,6 +211,8 @@ def parse_arguments():
     parser.add_argument('-tau', type=int, help="Number of autocorrelation features", default=tau)
     parser.add_argument("-reg", "--regularization", type=str, help="Regularization method", default=regularization)
     parser.add_argument("-v", "--variant", type=str, help="Model variant", default=variant)
+    parser.add_argument("-ew", "--eigenregularization_weight", type=float, help="Eigenregularization weight", default=initialize_eigenregularization_weight)
+    parser.add_argument("-sca", "--skip_connection_alpha", type=float, help="Skip connection alpha", default=skip_connection_alpha)
 
     parser.add_argument('-size', '--sample_size', type=int, help='Samples size', default=sample_size)
     parser.add_argument('-bs', '--batch_size', type=int, help='Batch size', default=batch_size)
@@ -216,6 +224,9 @@ def parse_arguments():
     parser.add_argument('-sp', "--step_size", type=int, help='Step size for schedular', default=step_size)
     parser.add_argument('-gm', "--gamma", type=float, help='Gamma value for schedular', default=gamma)
     parser.add_argument('-w', "--wandb", action="store_true", help='Use wandb', default=wandb_flag)
+
+    parser.add_argument('-skip_first_step', "--skip_first_step", action="store_true", help='Skip first step', default=SKIP_FIRST_STEP)
+    parser.add_argument('-skip_second_step', "--skip_second_step", action="store_true", help='Skip second step', default=SKIP_SECOND_STEP)
 
     return parser.parse_args()
 
@@ -243,7 +254,7 @@ if __name__ == "__main__":
         "tau": args.tau,
         "regularization": None if args.regularization == "None" else args.regularization,
         "variant": args.variant,
-        "initialize_eigenregularization_weight": initialize_eigenregularization_weight,  # initial value for eigenregularization weight
+        "initialize_eigenregularization_weight": args.eigenregularization_weight,  # initial value for eigenregularization weight
     }
     training_params = {
         "samples_size": args.sample_size,
@@ -268,7 +279,11 @@ if __name__ == "__main__":
         "LOAD_MODEL": False,
         "SAVE_MODEL": True,
     }
+    skip_first_step = args.skip_first_step
+    skip_second_step = args.skip_second_step
     train_dcd_music(simulation_commands=simulation_commands,
                     system_model_params=system_model_params,
                     model_params=model_params,
-                    training_params=training_params)
+                    training_params=training_params,
+                    skip_first_step=skip_first_step,
+                    skip_second_step=skip_second_step)

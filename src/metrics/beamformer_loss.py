@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.utils import device
+from src.config import device
 
 class BeamFromingLoss(nn.Module):
     def __init__(self ,array: torch.Tensor, sensors_distance: float, aggregate: str = "sum"):

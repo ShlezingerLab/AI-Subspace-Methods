@@ -488,11 +488,22 @@ def parse_loss_results_for_plotting(loss_results: dict, tested_param: str):
                 plt_res[method][tested_param].append(loss_[tested_param])
             except KeyError:
                 plt_res[method][tested_param].append(loss_["Overall"])
-            if loss_.get("Accuracy") is not None:
-                if "Accuracy" not in plt_res[method].keys():
-                    plt_res[method]["Accuracy"] = []
-                    plt_acc = True
-                plt_res[method]["Accuracy"].append(loss_["Accuracy"])
+            # check if there is a key that starts with "Accuracy"
+            keys = list(loss_.keys())
+            for key in keys:
+                if "Accuracy" in key and not key.endswith("Accuracy"):
+                    # extract the model order estimation from the key, by removing the "Accuracy" prefix and the "(" and ")"
+                    model_order_estimation = key.replace("Accuracy", "").replace("(", "").replace(")", "")
+                    if model_order_estimation not in plt_res[method].keys():
+                        plt_res[method][model_order_estimation] = {}
+                        plt_acc = True
+                    if "Accuracy" not in plt_res[method][model_order_estimation].keys():
+                        plt_res[method][model_order_estimation]["Accuracy"] = []
+                    plt_res[method][model_order_estimation]["Accuracy"].append(loss_[key])
+                elif key.endswith("Accuracy"):
+                    if key not in plt_res[method].keys():
+                        plt_res[method][key] = []
+                    plt_res[method][key].append(loss_[key])
     return plt_res, plt_acc
 
 
@@ -501,7 +512,7 @@ def print_loss_results_from_simulation(loss_results: dict):
     Print the loss results from the simulation.
     """
     for test, value_dict in loss_results.items():
-        print("#" * 10 + f"{test} TEST RESULTS" + "#" * 10)
+        print("#" * 10 + f" {test} TEST RESULTS " + "#" * 10)
         for test_value, results in value_dict.items():
             if test == "SNR":
                 print(f"{test} = {test_value} [dB]: ")
@@ -511,7 +522,7 @@ def print_loss_results_from_simulation(loss_results: dict):
                 txt = f"\t{method.upper(): <30}: "
                 for key, value in loss.items():
                     if value is not None:
-                        if key == "Accuracy":
+                        if key.startswith("Accuracy"):
                             txt += f"{key}: {value * 100:.2f} %|"
                         else:
                             txt += f"{key}: {value:.6e} |"
@@ -565,9 +576,10 @@ class LearnableSkipConnection(nn.Module):
         """
         super(LearnableSkipConnection, self).__init__()
         self.alpha = nn.Parameter(torch.tensor(alpha), requires_grad=True)
+        self.eps = 1e-8
 
     def forward(self, x1, x2):
-        return x1 + torch.clamp(self.alpha, min=0.0, max=1.0) * x2
+        return x1 + torch.clamp(self.alpha, min=self.eps, max=1.0 - self.eps) * x2
     
     def __repr__(self):
         return f"LearnableSkipConnection(alpha={self.alpha.item()})"

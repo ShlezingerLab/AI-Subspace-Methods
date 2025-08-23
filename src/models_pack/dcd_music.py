@@ -22,14 +22,16 @@ class DCDMUSIC(ParentModel):
                  regularization: str = None, variant: str = "small",
                  norm_layer: bool = True, batch_norm: bool = False, psd_epsilon: float = 1e-6,
                  load_angle_branch: bool = False, angle_extractor: SubspaceNet = None, load_range_branch: bool = False,
-                 initialize_eigenregularization_weight: float = 1e-1):
+                 initialize_eigenregularization_weight: float = 1e-1, skip_connection: bool = True, skip_connection_alpha: float = 1e-5):
         super(DCDMUSIC, self).__init__(system_model)
         self.tau = tau
         self.regularization = regularization
-        self.psd_epsilon = psd_epsilon
+        self.psd_epsilon = 1e-2 if system_model.params.snr in [0, 5] else 1e-3 if system_model.params.snr == 10 else psd_epsilon
         self.norm_layer = norm_layer
         self.batch_norm = batch_norm
         self.variant = variant
+        self.skip_connection = skip_connection
+        self.skip_connection_alpha = skip_connection_alpha
         self.angle_branch, self.range_branch = None, None # Holders for the angle and range branches
         self.__init_angle_branch(load_angle_branch, diff_method[0], initialize_eigenregularization_weight) if angle_extractor is None else angle_extractor
         self.__init_range_branch(load_range_branch, diff_method[1])
@@ -155,14 +157,17 @@ class DCDMUSIC(ParentModel):
         self.angle_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
                             system_model=self.system_model, field_type="far", regularization=self.regularization,
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
-                            psd_epsilon=self.psd_epsilon, initialize_eigenregularization_weight=initialize_eigenregularization_weight)
+                            skip_connection=self.skip_connection, skip_connection_alpha=self.skip_connection_alpha,
+                            psd_epsilon=self.psd_epsilon,
+                             initialize_eigenregularization_weight=initialize_eigenregularization_weight)
         self.load_angle_branch(load_state)
 
     def __init_range_branch(self, load_state: bool, diff_method: str):
         self.range_branch = SubspaceNet(tau=self.tau, diff_method=diff_method, train_loss_type="rmspe",
                             system_model=self.system_model, field_type="near", regularization=None,
-                            variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
-                            psd_epsilon=self.psd_epsilon, use_eigenregularization=False)
+                            variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm, 
+                            skip_connection=self.skip_connection, skip_connection_alpha=self.skip_connection_alpha,
+                            psd_epsilon=self.psd_epsilon)
         self.load_range_branch(load_state)
 
     def load_angle_branch(self, load_state: bool):
@@ -171,18 +176,23 @@ class DCDMUSIC(ParentModel):
     def load_range_branch(self, load_state: bool):
         self.range_branch = self.__load_branch(load_state, "range")
 
-    def __load_branch(self, load_state: bool, branch: str):
-        model = self.angle_branch if branch == "angle" else self.range_branch
-
+    def __load_branch(self, load_state: bool, branch: str, ext_path: str = None):
         if load_state:
-            path = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", model._get_name(), "final_models",
-                                model.get_model_file_name())
+            path = ext_path if ext_path is not None else os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
+                                    self.get_model_file_name())
             try:
-                model.load_state_dict(torch.load(path + ".pt", map_location=self.device, weights_only=True))
+                state_dict = torch.load(path + ".pt", map_location=self.device, weights_only=True)
+                if branch == "angle":
+                    state_dict = {k: v for k, v in state_dict.items() if k.startswith("angle_branch")}
+                elif branch == "range":
+                    state_dict = {k: v for k, v in state_dict.items() if k.startswith("range_branch")}
+                else:
+                    raise ValueError(f"DCDMUSIC.__load_branch: Unknown branch {branch}")
+                self.load_state_dict(state_dict, strict=False)
             except FileNotFoundError as e:
                 raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path}")
             print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {path}")
-        return model
+        return self.angle_branch if branch == "angle" else self.range_branch
 
 
     def print_model_params(self):

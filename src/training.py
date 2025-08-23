@@ -228,7 +228,11 @@ class Trainer:
 
         result_txt += (f"\nAccuracy for sources estimation: Train = {100 * epoch_train_acc:.2f}%, "
                        f"Validation = {valid_loss.get('Accuracy') * 100:.2f}%")
-        result_txt += f"\nlr {self.scheduler.get_last_lr()[0]}"
+        try:
+            last_lr = self.scheduler.get_last_lr()[0]
+            result_txt += f"\nlr {last_lr}"
+        except Exception as e:
+            result_txt += f"\nlr {self.training_params['learning_rate']}"
         try:
             eigenregularization_weight_tmp = self.model.get_eigenregularization_weight()
         except AttributeError:
@@ -269,28 +273,35 @@ class Trainer:
 
     def __load_model(self, load_model: bool):
         if load_model:
+
             try:
                 state_dict = torch.load(str(self.final_model_checkpoint) + ".pt", weights_only=True)
             except FileNotFoundError:
                 print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
                 return None
+            
+            if isinstance(self.model, DCDMUSIC):
+                if self.training_objective == "angle":
+                    # keep only angle branch weights
+                    state_dict = {k: v for k, v in state_dict.items() if k.startswith("angle_branch")}
+                    missing_keys, unexpected_keys = self.model.load_state_dict(state_dict, strict=False)
 
-            # don't load angle extractor weights
-            # if isinstance(self.model, DCDMUSIC):
-            #     state_dict = {k: v for k, v in state_dict.items() if not k.startswith("angle_extractor")}
-            #     model_dict = self.model.state_dict()
-            #     model_dict.update(state_dict)
-            # else:
-            #     model_dict = state_dict
-            model_dict = state_dict
-
-            try:
-                self.model.load_state_dict(model_dict)
-                print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
-            except Exception as e:
-                print("Error loading model from ", str(self.final_model_checkpoint) + ".pt")
-                print(e)
-                return None
+                    # remove missing keys that are from the range branch
+                    missing_keys = [k for k in missing_keys if not k.startswith("range_branch")]
+                    if len(missing_keys) > 0:
+                        raise ValueError(f"Missing keys: {missing_keys}")
+                    if len(unexpected_keys) > 0:
+                        raise ValueError(f"Unexpected keys: {unexpected_keys}")
+                    print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+                    return
+            else:
+                try:
+                    self.model.load_state_dict(state_dict)
+                    print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+                except Exception as e:
+                    print("Error loading model from ", str(self.final_model_checkpoint) + ".pt")
+                    print(e)
+                    return None
 
 
     def __plot_res(self):

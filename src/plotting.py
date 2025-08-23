@@ -36,7 +36,7 @@ from pathlib import Path
 from matplotlib import pyplot as plt
 import numpy as np
 from src.utils import plot_styles, parse_loss_results_for_plotting
-
+import warnings
 
 def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_to_file: bool = False):
     """
@@ -105,15 +105,19 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
     test_values = res.keys()
     if test == "eta":
         test_values = np.array(list(res.keys())) * 2
+    if test == "SNR":
+        warnings.warn("SNR values in the plot are multiplied by 2, due to an error in the signal creation")
+        test_values = np.array(list(res.keys())) * 2
     plt_res, plt_acc = parse_loss_results_for_plotting(res, tested_param)
     for method, loss_ in plt_res.items():
         # if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
         #     label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
         # else:
-        label = method
+
+        label = method.split("(")[0]
         if not np.isnan((loss_.get(tested_param))).any():
             try:
-                ax.plot(test_values, loss_[tested_param], **plot_styles[method], label=label)
+                ax.plot(test_values, loss_[tested_param], **plot_styles[label], label=label)
             except KeyError:
                 print(f"{method} does not have plot style")
                 ax.plot(test_values, loss_[tested_param], label=label)
@@ -140,7 +144,10 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
     ax.set_xticks(list(test_values))
     fig.tight_layout()
     if save_to_file:
-        fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
+        if tested_param in ["Angle", "Distance"]:
+            fig.savefig(simulations_path + f"_{tested_param}_loss.pdf", transparent=True, bbox_inches='tight')
+        else:
+            fig.savefig(simulations_path + "_loss.pdf", transparent=True, bbox_inches='tight')
     fig.show()
     if plt_acc and plot_acc:
         plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file)
@@ -149,8 +156,18 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
 def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=False):
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
     for method, loss_ in plt_res.items():
+        if method in ["TransMUSIC", "DeepCNN"]:
+            continue
+        keys = list(loss_.keys())
         if loss_.get("Accuracy") is not None:
             ax.plot(test_values, loss_["Accuracy"], label=method, **plot_styles[method])
+        elif any(key in ["AIC", "MDL", "Threshold"] for key in keys):
+            for key in keys:
+                if key in ["AIC", "MDL", "Threshold"]:
+                    style = method.split("(")[0]
+                    ax.plot(test_values, plt_res[method][key]["Accuracy"], label=key, **plot_styles[style])
+        else:
+            continue
     ax.legend()
     ax.grid()
     if test == "SNR":

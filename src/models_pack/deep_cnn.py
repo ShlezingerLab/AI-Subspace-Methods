@@ -7,7 +7,7 @@ DeepCNN: Deep learning algorithm as described in:
 
 import torch
 import torch.nn as nn
-from models_pack.parent_model import ParentModel
+from src.models_pack.parent_model import ParentModel
 from src.utils import sample_covariance, validate_constant_sources_number
 import numpy as np
 from src.metrics import RMSPELoss, CartesianLoss
@@ -48,20 +48,15 @@ class DeepCNN(ParentModel):
         self.BatchNorm = nn.BatchNorm2d(256)
         self.fc2 = nn.Linear(4096, 2048)
         self.fc3 = nn.Linear(2048, 1024)
-        self.dropOut = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.3)
         self.sigmoid = nn.Sigmoid()
         self.relu = nn.ReLU()
         angle_grid_size = len(self.angles_dict) if hasattr(self, 'angles_dict') else 1
-        self.fc_angle = nn.Sequential(
-                                    nn.Linear(1024, angle_grid_size),
-                                    self.sigmoid
-                                )
+        self.fc_angle = nn.Linear(1024, angle_grid_size)
         if self.system_model.params.field_type.startswith("near"):
             range_grid_size = len(self.ranges_dict) if hasattr(self, 'ranges_dict') else 1
-            self.fc_range = nn.Sequential(
-                                    nn.Linear(1024, range_grid_size),
-                                    self.sigmoid
-                                    )
+            self.fc_range = nn.Linear(1024, range_grid_size)
+                                   
 
     def forward(self, x):   
         # x is complex with shape [Batch size, N, T]
@@ -82,9 +77,9 @@ class DeepCNN(ParentModel):
         # FC BLOCK
         # Reshape Output shape: [Batch size, 256 * (self.N - 5) * (self.N - 5)]
         X = X.view(X.size(0), -1)
-        X = self.dropOut(self.relu(self.fc1(X)))  # [Batch size, 4096]
-        X = self.dropOut(self.relu(self.fc2(X)))  # [Batch size, 2048]
-        X = self.dropOut(self.relu(self.fc3(X)))  # [Batch size, 1024]
+        X = self.dropout(self.relu(self.fc1(X)))  # [Batch size, 4096]
+        X = self.dropout(self.relu(self.fc2(X)))  # [Batch size, 2048]
+        X = self.dropout(self.relu(self.fc3(X)))  # [Batch size, 1024]
         return self.__get_propabilities(X)  # [Batch size, angle_grid_size] or [Batch size, angle_grid_size, range_grid_size]
 
     def __get_propabilities(self, x):
@@ -102,26 +97,27 @@ class DeepCNN(ParentModel):
     
     def training_step(self, batch, batch_idx):
         if self.system_model.params.field_type.startswith("far"):
-            x, sources_num, vec_angles, _ = self.__prepare_batch_far_field(batch)
-            probs = self(x)
-            loss = self.train_loss(probs, vec_angles)
+            x, sources_num, vec_angles, _ = self.prepare_batch_far_field(batch)
+            logits = self(x)
+            loss = self.train_loss(logits, vec_angles)
         elif self.system_model.params.field_type in ["near", "full"]:
             x, sources_num, vec_angles, _, vec_ranges, _ = self.prepare_batch_near_field(batch)
-            angle_probs, range_probs = self(x)
-            loss_angle = self.train_loss(angle_probs, vec_angles)
-            loss_range = self.train_loss(range_probs, vec_ranges)
-            loss = loss_angle + loss_range
+            angle_logits, range_logits = self(x)
+            loss_angle = self.train_loss(angle_logits, vec_angles).mean(dim=-1)
+            loss_range = self.train_loss(range_logits, vec_ranges).mean(dim=-1)
+            loss = (loss_angle + loss_range) / 2.0
         else:
             raise ValueError(f"{self}.__training_step: Unrecognized field type for DeepCNN class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
-        return loss
+        return loss.sum(), 0.0, None # return a tuple to match the expected return type of training_step
     
     def validation_step(self, batch, batch_idx):
-        self.training_step(batch, batch_idx)
+        loss, acc = self.test_step(batch, batch_idx)
+        return loss, acc
 
     def test_step(self, batch, batch_idx):
         if self.system_model.params.field_type.startswith("far"):
-            x, sources_num, _, angles = self.__prepare_batch_far_field(batch)
+            x, sources_num, _, angles = self.prepare_batch_far_field(batch)
             probs = self(x)
             angles_pred = self.get_labels(probs, sources_num)
             loss = self.test_loss(angles_pred=angles_pred, angles=angles)
@@ -138,7 +134,7 @@ class DeepCNN(ParentModel):
         else:
             raise ValueError(f"{self}.__training_step: Unrecognized field type for DeepCNN class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
-        return loss
+        return loss, 0.0 # return a tuple to match the expected return type of test_step
     
     def get_labels(self, probs, sources_num, is_range=False):
         if not is_range:
@@ -162,19 +158,18 @@ class DeepCNN(ParentModel):
                                               dtype=torch.float64, device=self.device)
             return ranges_pred
     
-    def __prepare_batch_far_field(self, batch):
+    def prepare_batch_far_field(self, batch):
         x, sources_num, angles = super().prepare_batch_far_field(batch)
         # from the angles, create a vector that assigns 1 to the corresponding angle and 0 to others.
         batch_size = x.size(0)
         num_angles = len(self.angles_dict)
-        output = torch.zeros(batch_size, num_angles)
+        output_angles = torch.zeros(batch_size, num_angles)
         for i in range(batch_size):
             for angle in angles[i]:
-                if angle.item() in self.angle_to_index:
-                    output[i, self.angle_to_index[angle.item()]] = 1.0
-                else:
-                    raise ValueError(f"Angle {angle.item()} not found in angle_to_index mapping.")
-        return x, sources_num, output, angles
+                angle_val = angle.item()
+                closest_angle = min(self.angle_to_index.keys(), key=lambda x: abs(x - angle_val))
+                output_angles[i, self.angle_to_index[closest_angle]] = 1.0
+        return x, sources_num, output_angles.to(self.device), angles
 
     def prepare_batch_near_field(self, batch):
         x, sources_num, angles, ranges = super().prepare_batch_near_field(batch)
@@ -183,19 +178,19 @@ class DeepCNN(ParentModel):
         output_angles = torch.zeros(batch_size, num_angles)
         for i in range(batch_size):
             for angle in angles[i]:
-                if angle.item() in self.angle_to_index:
-                    output_angles[i, self.angle_to_index[angle.item()]] = 1.0
-                else:
-                    raise ValueError(f"Angle {angle.item()} not found in angle_to_index mapping.")
+                angle_val = angle.item()
+                closest_angle = min(self.angle_to_index.keys(), key=lambda x: abs(x - angle_val))
+                assert abs(closest_angle - angle_val) < 1e-6, f"Angle {angle_val} not found in angle_to_index mapping."
+                output_angles[i, self.angle_to_index[closest_angle]] = 1.0
         num_ranges = len(self.ranges_dict)
         output_ranges = torch.zeros(batch_size, num_ranges)
         for i in range(batch_size):
             for range_ in ranges[i]:
-                if range_.item() in self.range_to_index:
-                    output_ranges[i, self.range_to_index[range_.item()]] = 1.0
-                else:
-                    raise ValueError(f"Range {range_.item()} not found in range_to_index mapping.")
-        return x, sources_num, output_angles, angles, output_ranges, ranges
+                range_val = range_.item()
+                closest_range = min(self.range_to_index.keys(), key=lambda x: abs(x - range_val))
+                assert abs(closest_range - range_val) < 1e-6, f"Range {range_val} not found in range_to_index mapping."
+                output_ranges[i, self.range_to_index[closest_range]] = 1.0
+        return x, sources_num, output_angles.to(device=self.device), angles, output_ranges.to(device=self.device), ranges
 
     def pre_processing(self, x):
         """
@@ -214,7 +209,8 @@ class DeepCNN(ParentModel):
         angle_diff = torch.atan2(Rx_imag, Rx_real)  # Calculate angle difference
         # Stack the real part, imaginary part, and angle difference along the last dimension
         Rx_stacked = torch.stack((Rx_real, Rx_imag, angle_diff), dim=-1)
-        return Rx_stacked.view(Rx_stacked.size(0), 3, self.N, self.N)  # Reshape to (B, N, N, 3)
+        features = Rx_stacked.view(Rx_stacked.size(0), 3, Rx_stacked.size(1), Rx_stacked.size(1))
+        return features.to(torch.float32)  # Reshape to (B, N, N, 3)
 
     def __init_grid_params(self):
         angle_range = np.deg2rad(self.system_model.params.doa_range)
@@ -231,30 +227,27 @@ class DeepCNN(ParentModel):
             # if it's the Near field, there are 3 possabilities.
             fresnel = self.system_model.fresnel
             fraunhofer = self.system_model.fraunhofer
-            if self.estimation_params.startswith("angle"):
-                self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
-                                                dtype=torch.float64).to(torch.float64)
-                # self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
-                self.angle_to_index = {angle.item(): idx for idx, angle in enumerate(self.angles_dict)}
+            self.angles_dict = torch.arange(-angle_range, angle_range + angle_resolution, angle_resolution,
+                                            dtype=torch.float64).to(torch.float64)
+            # self.angles_dict = torch.round(self.angles_dict, decimals=angle_decimals)
+            self.angle_to_index = {angle.item(): idx for idx, angle in enumerate(self.angles_dict)}
 
-
-            if self.estimation_params.endswith("range"):
-                fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
-                distance_resolution = self.system_model.params.range_resolution / 2
-                max_distance = min(self.system_model.fraunhofer, fraunhofer * fraunhofer_ratio + distance_resolution)
-                self.ranges_dict = torch.arange(np.ceil(fresnel),
-                                                max_distance,
-                                                distance_resolution, dtype=torch.float64)
-                self.range_to_index = {range_.item(): idx for idx, range_ in enumerate(self.ranges_dict)}
+            fraunhofer_ratio = self.system_model.params.max_range_ratio_to_limit
+            distance_resolution = self.system_model.params.range_resolution / 2
+            max_distance = min(self.system_model.fraunhofer, fraunhofer * fraunhofer_ratio + distance_resolution)
+            self.ranges_dict = torch.arange(np.ceil(fresnel),
+                                            max_distance,
+                                            distance_resolution, dtype=torch.float64)
+            self.range_to_index = {range_.item(): idx for idx, range_ in enumerate(self.ranges_dict)}
         else:
             raise ValueError(f"{self}.__define_grid_params: Unrecognized field type for MUSIC class init stage,"
                              f" got {self.system_model.params.field_type} but only Far and Near are allowed.")
     
     def __set_criterion(self):
-        self.train_loss = nn.BCELoss(reduction='none')
-        if self.field_type == "far":
+        self.train_loss = nn.BCEWithLogitsLoss(reduction='none')
+        if self.system_model.params.field_type == "far":
             self.test_loss = RMSPELoss()
-        elif self.field_type == "near":
+        elif self.system_model.params.field_type in ["near", "full"]:
             self.test_loss = CartesianLoss()
             self.test_loss_separated = RMSPELoss(1.0)
     

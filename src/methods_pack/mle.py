@@ -5,7 +5,7 @@ import itertools
 from itertools import product
 
 from src.system_model import SystemModel
-from src.utils import *
+from src.config import device
 
 
 class MLE(nn.Module):

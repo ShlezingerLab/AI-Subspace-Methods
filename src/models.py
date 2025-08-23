@@ -9,9 +9,10 @@ Edited: 29/05/24
 
 # Imports
 import warnings
+import torch.nn as nn
 # Internal Imports
 from src.system_model import SystemModel, SystemModelParams
-from src.models_pack import TransMUSIC, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC, DeepCNN, DeepRootMUSIC
+from src.models_pack import TransMUSIC, SubspaceNet, DCDMUSIC, DeepAugmentedMUSIC, DeepCNN, DeepRootMUSIC, NFSubspaceNet
 
 
 class ModelGenerator(object):
@@ -31,8 +32,9 @@ class ModelGenerator(object):
         self.model_type: str = str(None)
         self.system_model: SystemModel = None
         self.model_params: dict = None
+        self.model: nn.Module = None
 
-    def set_model_type(self, model_type: str):
+    def set_model_type(self, model_type: str) -> "ModelGenerator":
         """
         Set the model type.
 
@@ -45,14 +47,10 @@ class ModelGenerator(object):
         Raises:
             ValueError: If model type is not provided.
         """
-        if not isinstance(model_type, str):
-            raise ValueError(
-                "ModelGenerator.set_model_type: model type has not been provided"
-            )
         self.model_type = model_type
         return self
 
-    def set_system_model(self, system_model_params: SystemModelParams):
+    def set_system_model(self, system_model_params: SystemModelParams) -> "ModelGenerator":
         """
         Set the system model.
 
@@ -65,10 +63,6 @@ class ModelGenerator(object):
         Raises:
             ValueError: If system_model is not provided.
         """
-        if not isinstance(system_model_params, SystemModelParams):
-            raise ValueError(
-                "ModelGenerator.set_system_model: system model params has not been provided"
-            )
         self.system_model = SystemModel(system_model_params, nominal=True)
         return self
 
@@ -85,19 +79,15 @@ class ModelGenerator(object):
         Raises:
             ValueError: If model type is not provided.
         """
-        if not isinstance(model_params, dict):
-            raise ValueError(
-                "ModelGenerator.set_model_params: model params has not been provided"
-            )
         # verify params for model.
         try:
             self.__verify_model_params(model_params)
         except Exception as e:
-            print(e)
+            raise ValueError(f"ModelGenerator.set_model_params: {e}")
         self.model_params = model_params
         return self
 
-    def set_model(self):
+    def set_model(self) -> "ModelGenerator":
         """
         Set the model based on the model type and system model parameters.
 
@@ -118,6 +108,8 @@ class ModelGenerator(object):
             self.__set_deepcnn()
         elif self.model_type.startswith("SubspaceNet"):
             self.__set_subspacenet()
+        elif self.model_type.startswith("NF-SubspaceNet"):
+            self.__set_nf_subspacenet()
         elif self.model_type.startswith("DCD-MUSIC"):
             self.__set_dcd_music()
         elif self.model_type.startswith("TransMUSIC"):
@@ -132,6 +124,12 @@ class ModelGenerator(object):
 
         """
         self.model = SubspaceNet(system_model=self.system_model, **self.model_params)
+    
+    def __set_nf_subspacenet(self):
+        """
+
+        """
+        self.model = NFSubspaceNet(system_model=self.system_model, **self.model_params)
 
     def __set_dcd_music(self):
         """
@@ -149,7 +147,7 @@ class ModelGenerator(object):
         """
 
         """
-        self.model = DeepCNN(N=self.system_model.params.N, **self.model_params)
+        self.model = DeepCNN(system_model=self.system_model)
 
     def __set_da_music(self):
         """
@@ -174,6 +172,8 @@ class ModelGenerator(object):
 
         if self.model_type.lower() == "subspacenet":
             self.__verify_subspacenet_params(model_params)
+        elif self.model_type.lower().startswith("nf-subspacenet"):
+            self.__verify_nf_subspacenet_params(model_params)
         elif self.model_type.lower().startswith("dcd-music"):
             self.__verify_dcdmuisc_params(model_params)
         elif self.model_type.lower() == "transmusic":
@@ -192,10 +192,7 @@ class ModelGenerator(object):
         """
         tau: int, diff_method: str = "root_music", field_type: str = "Far"
         """
-        tau = model_params.get("tau")
-        if not isinstance(tau, int) or not (tau < self.system_model.params.T):
-            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
-                             f" Tau has to be an int and smaller than T")
+        self.__verify_tau(model_params.get("tau"))
 
         field_type = model_params.get("field_type")
         if not isinstance(field_type, str) or not (field_type.lower() in ["far", "near"]):
@@ -221,10 +218,20 @@ class ModelGenerator(object):
             raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
                              f"train_loss_type has to be a str and the possible values are rmspe or music_spectrum.")
 
-        regularization = model_params.get("regularization")
-        if (not isinstance(regularization, str)) or (not (regularization.lower() in ["threshold", "mdl", "aic"])) or (regularization is not None):
-            raise ValueError(f"ModelGenerator.__verify_subspacenet_params:"
-                             f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
+        self.__verify_regularization(model_params.get("regularization"))
+
+    def __verify_nf_subspacenet_params(self, model_params):
+        """
+        tau: int
+        diff_method: tuple
+        """
+        self.__verify_tau(model_params.get("tau"))
+        diff_method = model_params.get("diff_method")
+        # diff methos has to be 2d_music
+        if not isinstance(diff_method, str) or not (diff_method.lower() in ["2d_music"]):
+            raise ValueError(f"ModelGenerator.__verify_nf_subspacenet_params:"
+                             f"diff_method has to be a str and the possible values are 2d_music.")
+        self.__verify_regularization(model_params.get("regularization"))
 
 
     def __verify_dcdmuisc_params(self, model_params):
@@ -232,10 +239,7 @@ class ModelGenerator(object):
         tau: int
         diff_method: tuple
         """
-        tau = model_params.get("tau")
-        if not isinstance(tau, int) or not (tau < self.system_model.params.T):
-            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
-                             f" Tau has to be an int and smaller than T")
+        self.__verify_tau(model_params.get("tau"))
         diff_method = model_params.get("diff_method")
         if not isinstance(diff_method, tuple) or not (len(diff_method) == 2):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
@@ -246,18 +250,16 @@ class ModelGenerator(object):
         if not (diff_method[1].lower() in ["music_1d"]):
             raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
                              f" second element of diff_method has to be music_1D_noise_ss, esprit or music_1d")
-        train_loss_type = model_params.get("train_loss_type")
-        if not isinstance(train_loss_type, tuple) or not (len(train_loss_type) == 2):
-            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
-                             f" train_loss_type has to be a tuple of two elements.")
-        if not (train_loss_type[0].lower() in ["rmspe", "music_spectrum"]) or not (
-                train_loss_type[1].lower() in ["rmspe", "music_spectrum"]):
-            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
-                             f" train_loss_type has to be rmspe or music_spectrum")
-        regularization = model_params.get("regularization")
-        if not isinstance(regularization, str) or not (regularization.lower() in ["threshold", "mdl", "aic"]) or not None:
-            raise ValueError(f"ModelGenerator.__verify_dcdmuisc_params:"
-                             f"regularization has to be a str and the possible values are threshold, mdl or aic. or None")
+        self.__verify_regularization(model_params.get("regularization"))
 
     def __str__(self):
         return f"{self.model.get_model_name()}"
+    
+    def __verify_regularization(self, regularization):
+        if regularization is not None and (not isinstance(regularization, str) or regularization.lower() not in ["threshold", "mdl", "aic"]):
+            raise ValueError(f"ModelGenerator.__verify_regularization:"
+                             f"regularization has to be a str and the possible values are threshold, mdl or aic, or None")
+    def __verify_tau(self, tau):
+        if not isinstance(tau, int) or not (tau < self.system_model.params.T):
+            raise ValueError(f"ModelGenerator.__verify_tau:"
+                             f" Tau has to be an int and smaller than T")

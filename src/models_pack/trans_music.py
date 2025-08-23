@@ -107,7 +107,7 @@ class TransMUSIC(ParentModel):
         elif self.estimation_params == "angle, range":
             self.input_dim = self.music.angles_dict.shape[0] * self.music.ranges_dict.shape[0]
             if isinstance(self.music.system_model.params.M, tuple):
-                output_dim = (self.music.system_model.params.M[1] - 1) * 2
+                output_dim = self.music.system_model.params.M[1] * 2
             else:
                 output_dim = self.music.system_model.params.M * 2
             # self.activation = ShiftedReLU(shift=np.floor(self.music.system_model.fresnel)).to(device)
@@ -309,9 +309,9 @@ class TransMUSIC(ParentModel):
             angles_pred = angles_pred[:, :angles.shape[1]]
             ranges_pred = ranges_pred[:, :ranges.shape[1]]
             loss = self.rmspe_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
-        if is_test:
-            _, angle_loss, range_loss = self.separated_test_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
-            loss = (loss, angle_loss, range_loss)
+            if is_test:
+                _, angle_loss, range_loss = self.separated_test_loss(angles_pred=angles_pred, angles=angles, ranges_pred=ranges_pred, ranges=ranges)
+                loss = (loss, angle_loss, range_loss)
         source_estimation = torch.argmax(prob_source_number, dim=1)
         acc = self.source_estimation_accuracy(sources_num, source_estimation)
         return loss, acc

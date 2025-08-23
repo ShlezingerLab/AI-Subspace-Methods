@@ -164,10 +164,26 @@ class Beamformer(Module):
         else:
             # in this case, the steering search space is 3D -> NxAxR, whereas R is the size of the ranges search
             # dictionary.
-            v1 = torch.einsum("arn, bnm -> barm", self.steering_dict.conj().transpose(0, 2).transpose(0, 1), cov)
-            spectrum = torch.einsum("barn, nar -> bar", v1, self.steering_dict)
-        if torch.imag(spectrum).abs().max() > 1e-6:
-            warnings.warn(f"Beamformer.get_spectrum: Imaginary part in the spectrum is not negligible!.")
+            try:
+                if self.device.type == "cuda":
+                    torch.cuda.empty_cache()
+                v1 = torch.einsum("arn, bnm -> barm", self.steering_dict.conj().transpose(0, 2).transpose(0, 1), cov)
+                spectrum = torch.einsum("barn, nar -> bar", v1, self.steering_dict)
+                if torch.imag(spectrum).abs().max() > 1e-6:
+                    raise ValueError(f"Beamformer.get_spectrum: Imaginary part in the spectrum is not negligible!.")
+            except RuntimeError:
+                warnings.warn("Beamformer.get_spectrum: Out of memory error, trying to free some memory and convert the batch operation to for loop.")
+                torch.cuda.empty_cache()
+                spectrum = torch.zeros((cov.shape[0], self.angles_dict.shape[0], self.ranges_dict.shape[0]), dtype=torch.float64, device=self.device)
+                hermitian_steering_dict = self.steering_dict.conj().transpose(0, 2).transpose(0, 1)
+                for batch in range(cov.shape[0]):
+                    v1 = torch.einsum("arn, nm -> arm", hermitian_steering_dict, cov[batch])
+                    spectrum[batch] = torch.einsum("arn, nar -> ar", v1, self.steering_dict)
+                    del v1
+                del hermitian_steering_dict
+                torch.cuda.empty_cache()
+        # if torch.imag(spectrum).abs().max() > 1e-6:
+            # warnings.warn(f"Beamformer.get_spectrum: Imaginary part in the spectrum is not negligible!.")
         return torch.real(spectrum)
 
     def find_peaks(self, spectrum: torch.Tensor, sources_num: int):

@@ -39,7 +39,6 @@ def __run_simulation(**kwargs):
     plot_mode = SIMULATION_COMMANDS["PLOT_RESULTS"]  # Plotting results
     save_plots = SIMULATION_COMMANDS["SAVE_PLOTS"]  # Saving plots
     load_data = not create_data  # Loading data from exist dataset
-    print("Running simulation...")
     if train_model:
         print("Training model - ", MODEL_CONFIG.get('model_type'))
         print("Training objective - ", TRAINING_PARAMS.get('training_objective'))
@@ -130,7 +129,7 @@ def __run_simulation(**kwargs):
         print("Creating Data...")
         # init sample model
         samples_model = Samples(system_model_params)
-        if train_model:
+        if train_model and TRAINING_PARAMS["epochs"] > 0:
             # Generate training dataset
             start = time.time()
             train_dataset, _ = create_dataset(

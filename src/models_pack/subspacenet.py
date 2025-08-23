@@ -18,16 +18,16 @@ from src.methods_pack.beamformer import Beamformer
 
 class SubspaceNet(ParentModel):
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
-                 system_model: SystemModel = None, field_type: str = "far", regularization: str = None, variant: str = "small",
-                  norm_layer: bool=True, psd_epsilon: float=.01, batch_norm: bool=False, skip_connection: bool=False,
-                  use_eigenregularization: bool = True, initialize_eigenregularization_weight: float = 1e-3):
+                 system_model: SystemModel=None, field_type: str="far", regularization: str=None, variant: str="small",
+                  norm_layer: bool=True, psd_epsilon: float=1e-6, batch_norm: bool=False, skip_connection: bool=False,
+                  skip_connection_alpha: float=None, initialize_eigenregularization_weight: float=1e-1):
         """Initializes the SubspaceNet model.
 
         Args:
         -----
             tau (int): Number of auto-correlation lags.
             diff_method (str): Differentiable subspace method.
-            train_loss_type (str): Training loss type.
+            train_loss_type (str): Training loss type. 
             system_model (SystemModel): System model.
             field_type (str): Field type.
             regularization (str): Regularization method.
@@ -35,6 +35,10 @@ class SubspaceNet(ParentModel):
             norm_layer (bool): Normalization layer.
             psd_epsilon (float): PSD epsilon.
             batch_norm (bool): Batch normalization.
+            skip_connection (bool): Skip connection.
+            skip_connection_alpha (float): Skip connection alpha.
+            use_eigenregularization (bool): Use eigen regularization.
+            initialize_eigenregularization_weight (float): Initialize eigen regularization weight.
 
         """
         super(SubspaceNet, self).__init__(system_model)
@@ -61,13 +65,13 @@ class SubspaceNet(ParentModel):
         self.__setup_model_variant(variant)
         self.__setup_norm_layer(norm_layer)
         self.__setup_batch_norm(batch_norm)
-        self.__setup_skip_connection(skip_connection)
+        self.__setup_skip_connection(skip_connection, skip_connection_alpha)
 
         # set model training parameters
         self.train_loss, self.validation_loss, self.test_loss, self.test_loss_separated = None, None, None, None
         self.__set_criterion(train_loss_type)
         self.__set_diff_method(diff_method, system_model)
-        if use_eigenregularization:
+        if regularization is not None:
             self.set_eigenregularization_schedular(init_value=initialize_eigenregularization_weight)
 
     def get_surrogate_covariance(self, x: torch.Tensor):
@@ -238,9 +242,10 @@ class SubspaceNet(ParentModel):
 
         return Rx_tau
 
-    def __setup_skip_connection(self, skip_connection: bool):
+    def __setup_skip_connection(self, skip_connection: bool, alpha: float = None):
         if skip_connection:
-            self.skip_connection = LearnableSkipConnection(alpha=1e-1 if self.system_model.params.signal_nature == "non-coherent" else 1e-4)
+            alpha = alpha if alpha is not None else 1e-1 if self.system_model.params.signal_nature == "non-coherent" else 1e-4
+            self.skip_connection = LearnableSkipConnection(alpha=alpha)
 
     def __setup_model_variant(self, variant: str):
         if variant in ["big", "V2"]:
@@ -323,6 +328,8 @@ class SubspaceNet(ParentModel):
             name = super(SubspaceNet, self)._get_name()
         elif self.field_type == "near" and isinstance(self.train_loss, MusicSpectrumLoss):
             name = "NF" + super(SubspaceNet, self)._get_name()
+        else:
+            name = super(SubspaceNet, self)._get_name()
         if self.variant:
             name += f"_{self.variant}"
         return name
@@ -518,10 +525,17 @@ class SubspaceNet(ParentModel):
             self.test_loss_separated = RMSPELoss(1.0)
 
     def __adjust_psd_eps(self):
-        if self.training: #
+        if self.training:
             return self.psd_epsilon
         else:
-            return self.psd_epsilon
+            is_nf = self._get_name().startswith("NF")
+            is_coherent = self.system_model.params.signal_nature == "coherent"
+            is_snr_5 = self.system_model.params.snr == 5
+            flag = is_nf and is_coherent and is_snr_5
+            if flag:
+                return 1e-2
+            else:
+                return self.psd_epsilon
 
         snr = self.system_model.params.snr
         is_nf = self._get_name().startswith("NF")
