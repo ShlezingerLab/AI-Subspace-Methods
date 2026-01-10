@@ -178,20 +178,36 @@ class DCDMUSIC(ParentModel):
 
     def __load_branch(self, load_state: bool, branch: str, ext_path: str = None):
         if load_state:
-            path = ext_path if ext_path is not None else os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
+            if ext_path is not None:
+                path = ext_path
+            else:
+                path = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
                                     self.get_model_file_name())
             try:
                 state_dict = torch.load(path + ".pt", map_location=self.device, weights_only=True)
-                if branch == "angle":
-                    state_dict = {k: v for k, v in state_dict.items() if k.startswith("angle_branch")}
-                elif branch == "range":
-                    state_dict = {k: v for k, v in state_dict.items() if k.startswith("range_branch")}
+            except FileNotFoundError:
+                # Try backward-compatible path (without size suffix) if samples_size is set
+                if ext_path is None and self.samples_size is not None:
+                    path_without_size = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
+                                                    self.get_model_file_name(include_size=False))
+                    try:
+                        print(f"DCDMUSIC.__load_branch: Model not found with size suffix, trying without: {path_without_size}.pt")
+                        state_dict = torch.load(path_without_size + ".pt", map_location=self.device, weights_only=True)
+                        print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from backward-compatible path: {path_without_size}")
+                    except FileNotFoundError:
+                        raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path} or {path_without_size}")
                 else:
-                    raise ValueError(f"DCDMUSIC.__load_branch: Unknown branch {branch}")
-                self.load_state_dict(state_dict, strict=False)
-            except FileNotFoundError as e:
-                raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path}")
-            print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {path}")
+                    raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path}")
+            
+            if branch == "angle":
+                state_dict = {k: v for k, v in state_dict.items() if k.startswith("angle_branch")}
+            elif branch == "range":
+                state_dict = {k: v for k, v in state_dict.items() if k.startswith("range_branch")}
+            else:
+                raise ValueError(f"DCDMUSIC.__load_branch: Unknown branch {branch}")
+            self.load_state_dict(state_dict, strict=False)
+            if ext_path is None:
+                print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {path}")
         return self.angle_branch if branch == "angle" else self.range_branch
 
 

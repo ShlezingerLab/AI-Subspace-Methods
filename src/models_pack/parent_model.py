@@ -9,12 +9,13 @@ from src.utils import validate_constant_sources_number
 
 EIGEN_REGULARIZATION_WEIGHT = 1e-3
 class ParentModel(nn.Module):
-    def __init__(self, system_model: SystemModel):
+    def __init__(self, system_model: SystemModel, samples_size: int = None):
         super(ParentModel, self).__init__()
         self.device = device
         self.system_model = system_model
         self.under_estimation_counter = 0
         self.over_estimation_counter = 0
+        self.samples_size = samples_size  # Optional: used for checkpoint naming when dataset size varies
 
     def get_model_name(self):
         return f"{self._get_name()}_{self.print_model_params()}"
@@ -25,7 +26,17 @@ class ParentModel(nn.Module):
     def get_model_params(self):
         return None
 
-    def get_model_file_name(self):
+    def get_model_file_name(self, include_size: bool = True):
+        """
+        Get the model checkpoint filename.
+        
+        Args:
+            include_size (bool): If True and samples_size is set, include _size={samples_size} in filename.
+                                If False, return filename without size suffix (for backward compatibility).
+        
+        Returns:
+            str: The model checkpoint filename.
+        """
         if isinstance(self.system_model.params.M, tuple):
             low_M, high_M = self.system_model.params.M
             M = f"random_{low_M}_{high_M}"
@@ -40,7 +51,7 @@ class ParentModel(nn.Module):
         field_type = self.system_model.params.field_type
         if field_type == "full":
             field_type = "near"
-        return f"{self.get_model_name()}_" + \
+        filename = f"{self.get_model_name()}_" + \
             f"N={self.system_model.params.N}_" + \
             f"M={M}_" + \
             f"T={self.system_model.params.T}_" + \
@@ -50,6 +61,9 @@ class ParentModel(nn.Module):
             f"{self.system_model.params.signal_nature}_" + \
             f"eta={self.system_model.params.eta}_" + \
             f"sv_var={self.system_model.params.sv_noise_var}"
+        if include_size and self.samples_size is not None:
+            filename += f"_size={self.samples_size}"
+        return filename
 
     def training_step(self, batch, batch_idx):
         raise NotImplementedError

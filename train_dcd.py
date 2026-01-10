@@ -144,6 +144,7 @@ def train_dcd_music(*args, **kwargs):
                                    "variant": MODEL_PARAMS.get("variant"),
                                    "initialize_eigenregularization_weight": MODEL_PARAMS.get("initialize_eigenregularization_weight", 1e-1),
                                    "skip_connection_alpha": skip_connection_alpha})
+    model_config.set_samples_size(samples_size)  # Set samples_size for checkpoint naming
     model_config.set_model()
     model_config.model.switch_train_mode()
     # model_config.model.update_train_mode("angle")

@@ -273,12 +273,28 @@ class Trainer:
 
     def __load_model(self, load_model: bool):
         if load_model:
-
+            # Try loading with current filename (may include _size=...)
+            checkpoint_path = self.final_model_checkpoint
+            state_dict = None
+            
             try:
-                state_dict = torch.load(str(self.final_model_checkpoint) + ".pt", weights_only=True)
+                state_dict = torch.load(str(checkpoint_path) + ".pt", weights_only=True)
             except FileNotFoundError:
-                print("Model not found in ", str(self.final_model_checkpoint) + ".pt")
-                return None
+                # If not found and filename includes size suffix, try without it (backward compatibility)
+                if self.model.samples_size is not None:
+                    filename_without_size = self.model.get_model_file_name(include_size=False)
+                    fallback_path = checkpoint_path.parent / filename_without_size
+                    try:
+                        print(f"Model not found with size suffix, trying without: {fallback_path}.pt")
+                        state_dict = torch.load(str(fallback_path) + ".pt", weights_only=True)
+                        print(f"Loaded model from backward-compatible path: {fallback_path}.pt")
+                    except FileNotFoundError:
+                        print("Model not found in ", str(checkpoint_path) + ".pt")
+                        print("Also tried backward-compatible path: ", str(fallback_path) + ".pt")
+                        return None
+                else:
+                    print("Model not found in ", str(checkpoint_path) + ".pt")
+                    return None
             
             if isinstance(self.model, DCDMUSIC):
                 if self.training_objective == "angle":

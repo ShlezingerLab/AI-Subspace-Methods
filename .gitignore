@@ -13,3 +13,5 @@ logs/
 *.out
 *.sbatch
 *.log
+.vscode/
+.github/

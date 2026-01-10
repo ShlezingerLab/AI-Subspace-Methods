@@ -33,6 +33,7 @@ class ModelGenerator(object):
         self.system_model: SystemModel = None
         self.model_params: dict = None
         self.model: nn.Module = None
+        self.samples_size: int = None
 
     def set_model_type(self, model_type: str) -> "ModelGenerator":
         """
@@ -87,6 +88,19 @@ class ModelGenerator(object):
         self.model_params = model_params
         return self
 
+    def set_samples_size(self, samples_size: int) -> "ModelGenerator":
+        """
+        Set the samples size for checkpoint naming when dataset size varies.
+
+        Parameters:
+            samples_size (int): The dataset size.
+
+        Returns:
+            ModelGenerator: The updated ModelGenerator object.
+        """
+        self.samples_size = samples_size
+        return self
+
     def set_model(self) -> "ModelGenerator":
         """
         Set the model based on the model type and system model parameters.
@@ -116,6 +130,10 @@ class ModelGenerator(object):
             self.__set_transmusic()
         else:
             raise Exception(f"ModelGenerator.set_model: Model type {self.model_type} is not defined")
+
+        # Set samples_size on the model if it was specified (for checkpoint naming)
+        if self.samples_size is not None and hasattr(self.model, 'samples_size'):
+            self.model.samples_size = self.samples_size
 
         return self
 

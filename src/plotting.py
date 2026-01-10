@@ -1,33 +1,5 @@
 """
-Subspace-Net
-
-Details
-----------
-Name: plotting.py
-Authors: D. H. Shmuel
-Created: 01/10/21
-Edited: 29/06/23
-
-Purpose
-----------
-This module provides functions for plotting subspace methods spectrums,
-like and RootMUSIC, MUSIC, and also beam patterns of MVDR.
- 
-Functions:
-----------
-
-plot_spectrum(predictions: np.ndarray, true_DOA: np.ndarray, system_model=None,
-    spectrum: np.ndarray =None, roots: np.ndarray =None, algorithm:str ="music",
-    figures:dict = None): Wrapper spectrum plotter based on the algorithm.
-plot_music_spectrum(system_model, figures: dict, spectrum: np.ndarray, algorithm: str):
-    Plot the MUSIC spectrum.
-plot_root_music_spectrum(roots: np.ndarray, predictions: np.ndarray,
-    true_DOA: np.ndarray, algorithm: str): Plot the Root-MUSIC spectrum.
-plot_mvdr_spectrum(system_model, figures: dict, spectrum: np.ndarray,
-    true_DOA: np.ndarray, algorithm: str): Plot the MVDR spectrum.
-initialize_figures(void): Generates template dictionary containing figure objects for plotting multiple spectrums.
-
-
+Module for plotting simulation results.
 """
 # Imports
 from datetime import datetime
@@ -42,7 +14,7 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
     """
     Plot the results of the simulation.
     The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
-    or with diffetent noise to the steering matrix.
+    or with diffetent noise to the steering matrix, or with different dataset sizes.
 
     Parameters
     ----------
@@ -58,12 +30,14 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
     snapshots_plot_path = base_plot_path / "Snapshots"
     steering_noise_plot_path = base_plot_path / "SteeringNoise"
     number_of_sources_plot_path = base_plot_path / "NumberOfSources"
+    dataset_size_plot_path = base_plot_path / "DatasetSize"
     base_plot_path.mkdir(parents=True, exist_ok=True)
     snr_plot_path.mkdir(parents=True, exist_ok=True)
     snapshots_plot_path.mkdir(parents=True, exist_ok=True)
     steering_noise_plot_path.mkdir(parents=True, exist_ok=True)
     number_of_sources_plot_path.mkdir(parents=True, exist_ok=True)
-    plot_paths = {"SNR": snr_plot_path, "T": snapshots_plot_path, "eta": steering_noise_plot_path, "M": number_of_sources_plot_path}
+    dataset_size_plot_path.mkdir(parents=True, exist_ok=True)
+    plot_paths = {"SNR": snr_plot_path, "T": snapshots_plot_path, "eta": steering_noise_plot_path, "M": number_of_sources_plot_path, "samples_size": dataset_size_plot_path}
 
 
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
@@ -87,7 +61,7 @@ def plot_test_results(test: str, res: dict, simulations_path: str, tested_param:
     For example: res = {10: {"MUSIC": {"Overall": 0.1, "Accuracy": 0.9}, "RootMUSIC": {"Overall": 0.2, "Accuracy": 0.8}}
     Or, for near filed scenrio: res = {10: {"MUSIC": {"Overall": 0.1, "Angle": 0.2, "Distance": 0.3, "Accuracy": 0.9},
     "RootMUSIC": {"Overall": 0.2, "Angle": 0.3, "Distance": 0.4, "Accuracy": 0.8}}
-    The possible test are: "SNR", "T", "eta"
+    The possible test are: "SNR", "T", "eta", "M", "samples_size"
     """
     if tested_param not in ["Overall", "Angle", "Distance"]:
         raise ValueError(f"Unknown tested_param: {tested_param}")
@@ -132,6 +106,10 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         ax.set_xlabel("$\eta[{\lambda}/{2}]$")
     elif test == "M":
         ax.set_xlabel("Number Of Sources")
+    elif test == "samples_size":
+        ax.set_xlabel("Dataset Size")
+        ax.set_xticks(list(test_values))
+        ax.set_xscale("log")
     ax.set_ylabel(f"RMSPE [{units}]")
     # ax.set_title("Overall RMSPE loss")
     if tested_param == "Angle":
@@ -176,6 +154,10 @@ def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=
         ax.set_xlabel("T")
     elif test == "eta":
         ax.set_xlabel("eta")
+    elif test == "M":
+        ax.set_xlabel("Number Of Sources")
+    elif test == "samples_size":
+        ax.set_xlabel("Dataset Size")
     ax.set_ylabel("Accuracy [%]")
     # ax.set_title("Accuracy")
     ax.set_yscale("linear")

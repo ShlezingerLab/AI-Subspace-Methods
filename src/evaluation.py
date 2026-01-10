@@ -91,7 +91,16 @@ def get_model_based_method(method_name: str, system_model_params: SystemModelPar
     return method
 
 
-def get_model(params: dict, system_model_params: SystemModelParams, model_name: str = ""):
+def get_model(params: dict, system_model_params: SystemModelParams, model_name: str = "", samples_size: int = None):
+    """
+    Get a model instance and load its weights.
+    
+    Args:
+        params: Model parameters dictionary
+        system_model_params: System model parameters
+        model_name: Name of the model type
+        samples_size: Optional dataset size for checkpoint naming (for backward compatibility)
+    """
     try:
         model_name = params.get("model_name")
     except KeyError:
@@ -101,6 +110,7 @@ def get_model(params: dict, system_model_params: SystemModelParams, model_name: 
         .set_model_type(model_name)
         .set_system_model(system_model_params)
         .set_model_params({x: params[x] for x in params if x != "model_name"})
+        .set_samples_size(samples_size)  # Set samples_size for checkpoint naming
         .set_model()
     )
     model = model_config.model
@@ -116,8 +126,25 @@ def get_model(params: dict, system_model_params: SystemModelParams, model_name: 
     #     if isinstance(model, DCDMUSIC):
     #         model._load_state_for_angle_extractor()
     except FileNotFoundError as e:
-        print("####################################")
-        raise e
+        # Try backward-compatible path (without size suffix) if samples_size is set
+        if model.samples_size is not None:
+            path_without_size = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name(include_size=False))
+            try:
+                print(f"Model not found with size suffix, trying without: {path_without_size}.pt")
+                state_dict = torch.load(path_without_size+".pt", map_location=device, weights_only=True)
+                if "model_state_dict" in state_dict:
+                    state_dict = state_dict["model_state_dict"]
+                state_dict = {k: v for k, v in state_dict.items() if not k.endswith(".eigen_threshold")}
+                model.load_state_dict(state_dict)
+                print(f"get_model: {model._get_name()}'s weights loaded succesfully from backward-compatible path: {path_without_size}")
+            except FileNotFoundError:
+                print("####################################")
+                print(f"Model not found in {path}.pt")
+                print(f"Also tried backward-compatible path: {path_without_size}.pt")
+                raise e
+        else:
+            print("####################################")
+            raise e
         # print("####################################")
         # try:
         #     print(f"Model {model_name}'s weights not found in final_models, trying to load from temp weights.")
@@ -201,7 +228,8 @@ def evaluate_dnn_model(model: nn.Module, dataset: DataLoader, mode: str="valid")
 
 def evaluate_augmented_model(augmented_method: tuple[str, str],
                             dataset,
-                            system_model_params: SystemModelParams):
+                            system_model_params: SystemModelParams,
+                            samples_size: int = None):
     """
 
     Args:
@@ -220,7 +248,8 @@ def evaluate_augmented_model(augmented_method: tuple[str, str],
 
     model = get_model(model_name=model_name,
                 params=model_params,
-                system_model_params=system_model_params)
+                system_model_params=system_model_params,
+                samples_size=samples_size)
     # Initialize instances of subspace methods
     method = get_model_based_method(algorithm, system_model_params)
     over_all_loss = 0.0
@@ -479,7 +508,8 @@ def evaluate(
         models: dict = None,
         augmented_methods: list = None,
         subspace_methods: list = None,
-        model_tmp: nn.Module = None
+        model_tmp: nn.Module = None,
+        samples_size: int = None
 ):
     """
     Wrapper function for model and algorithm evaluations.
@@ -493,6 +523,8 @@ def evaluate(
         subspace_methods (list, optional): List of subspace methods for evaluation.
             Defaults to None.
         model_tmp (nn.Module, optional): Temporary model for evaluation. Defaults to None.
+        samples_size (int, optional): Dataset size for checkpoint naming when loading models.
+            Defaults to None.
 
     Returns:
         dict: Dictionary containing the evaluation results.
@@ -508,7 +540,7 @@ def evaluate(
         res[model_name + "_tmp"] = model_test_loss
     # Evaluate DNN models
     for model_name, params in models.items():
-        model = get_model(model_name=model_name, params=params, system_model_params=system_model_params)
+        model = get_model(model_name=model_name, params=params, system_model_params=system_model_params, samples_size=samples_size)
         # num_of_params = sum(p.numel() for p in model.parameters())
         # total_size = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
         # print(f"Number of parameters in {model_name}: {num_of_params} with total size: {total_size} bytes")
@@ -531,6 +563,7 @@ def evaluate(
             augmented_method=algorithm,
             dataset=generic_test_dataset,
             system_model_params=system_model_params,
+            samples_size=samples_size
         )
         res["augmented" + f"_{algorithm[0]}_{algorithm[1]}"] = loss
     # Evaluate classical subspace methods

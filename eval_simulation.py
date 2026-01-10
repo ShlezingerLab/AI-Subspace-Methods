@@ -37,7 +37,7 @@ scenario_dict = {
     # "T": [10, 20, 30, 50, 70, 100],
     # "eta": [0.0, 0.02, 0.04, 0.06, 0.08, 0.1],
     # "M": [2, 3, 4, 5, 6, 7],
-    # "samples_size": [128, 1024, 4096, 16384],
+    "samples_size": [128, 1024, 4096, 16384],
 }
 
 simulation_commands = {
@@ -46,22 +46,22 @@ simulation_commands = {
     "SAVE_DATASET": True, # if true, the dataset will be saved to a file
     "LOAD_MODEL": False, # if true, the model will be loaded from a file
     "TRAIN_MODEL": False, # if true, the model will be trained
-    "SAVE_MODEL": True, # if true, the model will be saved to a file
-    "EVALUATE_MODE": False, # if true, a test will be performed
+    "SAVE_MODEL": False, # if true, the model will be saved to a file
+    "EVALUATE_MODE": True, # if true, a test will be performed
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": False,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
+    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 
 system_model_params = {
     "N": 15,  # number of antennas
     "M": 2,  # number of sources
-    "T": 200,  # number of snapshots
-    "snr": 10,  # if defined, values in scenario_dict will be ignored
+    "T": 50,  # number of snapshots
+    "snr": 0,  # if defined, values in scenario_dict will be ignored
     "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
@@ -98,7 +98,7 @@ elif model_config.get("model_type") == "DCD-MUSIC":
 
 training_params = {
     "samples_size": 1024,
-    "train_test_ratio": .1,
+    "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 32,
     "epochs": 0,
@@ -118,20 +118,20 @@ training_params = {
 regularization_methods = "aic" # None, aic, mdl, threshold
 evaluation_params = {
     "models": {
-        # "TransMUSIC": {
-        #                 "model_name": "TransMUSIC",
-        #             },
+        "TransMUSIC": {
+                        "model_name": "TransMUSIC",
+                    },
         # "DeepCNN": {
         #     "model_name": "DeepCNN",
         # },
-        # "DCD-MUSIC": {
-        #             "model_name": "DCD-MUSIC",
-        #             "tau": 8,
-        #             "diff_method": ("esprit", "music_1d"),
-        #             "regularization": "aic",    
-        #             "skip_connection": True,
-        #             "psd_epsilon": 1e-6,
-        #               },
+        "DCD-MUSIC": {
+                    "model_name": "DCD-MUSIC",
+                    "tau": 8,
+                    "diff_method": ("esprit", "music_1d"),
+                    # "regularization": "aic",    
+                    "skip_connection": True,
+                    "psd_epsilon": 1e-6,
+                      },
         "NFSubspaceNet": {
                         "model_name": "SubspaceNet",
                         "tau": 8,
@@ -150,7 +150,7 @@ evaluation_params = {
     ],
     "subspace_methods": [
         # "CCRB",
-        "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
+        # "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
         #  "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
