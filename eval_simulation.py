@@ -121,9 +121,9 @@ evaluation_params = {
         "TransMUSIC": {
                         "model_name": "TransMUSIC",
                     },
-        # "DeepCNN": {
-        #     "model_name": "DeepCNN",
-        # },
+        "DeepCNN": {
+            "model_name": "DeepCNN",
+        },
         "DCD-MUSIC": {
                     "model_name": "DCD-MUSIC",
                     "tau": 8,
@@ -150,7 +150,7 @@ evaluation_params = {
     ],
     "subspace_methods": [
         # "CCRB",
-        # "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
+        "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
         #  "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",
