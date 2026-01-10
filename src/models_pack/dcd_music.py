@@ -12,7 +12,7 @@ from src.methods_pack.music import MUSIC
 
 class DCDMUSIC(ParentModel):
     """
-    The Deep-Cascadede-defferntiable MUSIC is a suggested solution for localization in near-field.
+    The Deep-Cascadede-defferentiable MUSIC is a suggested solution for localization in near-field.
     It uses 2 SubspaceNet:
     The first, is SubspaceNet+Esprit/RootMusic/MUSIC(with Maskpeak), to get the angle from the input tensor.
     The second, uses the first to extract the angles, and then uses the angles to get the distance.
@@ -22,7 +22,10 @@ class DCDMUSIC(ParentModel):
                  regularization: str = None, variant: str = "small",
                  norm_layer: bool = True, batch_norm: bool = False, psd_epsilon: float = 1e-6,
                  load_angle_branch: bool = False, angle_extractor: SubspaceNet = None, load_range_branch: bool = False,
-                 initialize_eigenregularization_weight: float = 1e-1, skip_connection: bool = True, skip_connection_alpha: float = 1e-5):
+                 initialize_eigenregularization_weight: float = 1e-1, skip_connection: bool = True, skip_connection_alpha: float = 1e-5,
+                 mask_init_cell_coeff: float = None, mask_decrease: bool = False,
+                 mask_decrease_interval: int = 20, mask_decrease_factor: float = 0.95,
+                 mask_min_cell_size: int = 1):
         super(DCDMUSIC, self).__init__(system_model)
         self.tau = tau
         self.regularization = regularization
@@ -34,6 +37,12 @@ class DCDMUSIC(ParentModel):
         self.skip_connection_alpha = skip_connection_alpha
         self.angle_branch, self.range_branch = None, None # Holders for the angle and range branches
         self.__init_angle_branch(load_angle_branch, diff_method[0], initialize_eigenregularization_weight) if angle_extractor is None else angle_extractor
+        # store maskpeak configuration to forward to SubspaceNet
+        self.mask_init_cell_coeff = mask_init_cell_coeff
+        self.mask_decrease = mask_decrease
+        self.mask_decrease_interval = mask_decrease_interval
+        self.mask_decrease_factor = mask_decrease_factor
+        self.mask_min_cell_size = mask_min_cell_size
         self.__init_range_branch(load_range_branch, diff_method[1])
         self.train_mode = "position" # Default to position mode
         # self.update_train_mode("angle") # "angle", "range" or "position"
@@ -159,7 +168,10 @@ class DCDMUSIC(ParentModel):
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
                             skip_connection=self.skip_connection, skip_connection_alpha=self.skip_connection_alpha,
                             psd_epsilon=self.psd_epsilon,
-                             initialize_eigenregularization_weight=initialize_eigenregularization_weight)
+                                                             initialize_eigenregularization_weight=initialize_eigenregularization_weight,
+                                                             mask_init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
+                                                             mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
+                                                             mask_min_cell_size=self.mask_min_cell_size)
         self.load_angle_branch(load_state)
 
     def __init_range_branch(self, load_state: bool, diff_method: str):
@@ -167,7 +179,10 @@ class DCDMUSIC(ParentModel):
                             system_model=self.system_model, field_type="near", regularization=None,
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm, 
                             skip_connection=self.skip_connection, skip_connection_alpha=self.skip_connection_alpha,
-                            psd_epsilon=self.psd_epsilon)
+                            psd_epsilon=self.psd_epsilon,
+                            mask_init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
+                            mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
+                            mask_min_cell_size=self.mask_min_cell_size)
         self.load_range_branch(load_state)
 
     def load_angle_branch(self, load_state: bool):

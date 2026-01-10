@@ -263,7 +263,13 @@ class Trainer:
             self.best_epoch = epoch
             # Saving State Dict
             self.best_model_wts = copy.deepcopy(self.model.state_dict())
-            torch.save(self.model.state_dict(), str(self.checkpoint_path / self.model.get_model_file_name()) + ".pt")
+            checkpoint = {
+                'state_dict': self.model.state_dict()
+            }
+            # Save mask_init_cell_coeff only for DCD models
+            if isinstance(self.model, DCDMUSIC):
+                checkpoint['mask_init_cell_coeff'] = getattr(self.model, 'mask_init_cell_coeff', None)
+            torch.save(checkpoint, str(self.checkpoint_path / self.model.get_model_file_name()) + ".pt")
 
     def __save_final_model(self, save_final: bool=True):
         if save_final:
@@ -273,12 +279,11 @@ class Trainer:
 
     def __load_model(self, load_model: bool):
         if load_model:
-            # Try loading with current filename (may include _size=...)
             checkpoint_path = self.final_model_checkpoint
-            state_dict = None
-            
+            checkpoint = None
+
             try:
-                state_dict = torch.load(str(checkpoint_path) + ".pt", weights_only=True)
+                checkpoint = torch.load(str(checkpoint_path) + ".pt")
             except FileNotFoundError:
                 # If not found and filename includes size suffix, try without it (backward compatibility)
                 if self.model.samples_size is not None:
@@ -286,7 +291,7 @@ class Trainer:
                     fallback_path = checkpoint_path.parent / filename_without_size
                     try:
                         print(f"Model not found with size suffix, trying without: {fallback_path}.pt")
-                        state_dict = torch.load(str(fallback_path) + ".pt", weights_only=True)
+                        checkpoint = torch.load(str(fallback_path) + ".pt")
                         print(f"Loaded model from backward-compatible path: {fallback_path}.pt")
                     except FileNotFoundError:
                         print("Model not found in ", str(checkpoint_path) + ".pt")

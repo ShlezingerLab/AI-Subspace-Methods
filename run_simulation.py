@@ -377,6 +377,74 @@ def run_simulation(**kwargs):
                 display_key = true_range * wavelength
                 loss_dict["true_range_test"][display_key] = loss
                 kwargs["training_params"]["true_range_test"] = default_true_range_test
+        if key == "mask_init_coeff":
+            # Sweep over initial mask coefficient values. For each coefficient, instantiate the model
+            # to compute the absolute mask cell size (used by MUSIC.__init_cells) and use that absolute
+            # value as the key for storing/plotting results.
+            loss_dict["mask_init_coeff"] = {}
+            print(f"Testing mask_init_coeff values: {value}")
+            # Create a shared ModelGenerator setup to avoid duplicating code
+            for coeff in value:
+                # update model params with the coefficient
+                kwargs["model_config"]["model_params"]["mask_init_cell_coeff"] = coeff
+
+                # instantiate a temporary model to read the absolute cell size(s)
+                try:
+                    tmp_model = (
+                        ModelGenerator()
+                        .set_model_type(kwargs["model_config"].get("model_type"))
+                        .set_system_model(system_model_params)
+                        .set_model_params(kwargs["model_config"].get("model_params"))
+                        .set_samples_size(default_samples_size)
+                        .set_model()
+                    ).model
+                except Exception as e:
+                    print(f"Warning: could not instantiate model to compute absolute mask size for coeff={coeff}: {e}")
+                    abs_key = coeff
+                else:
+                    # Try to extract an appropriate cell size from the model (angle or range)
+                    abs_key = coeff
+                    try:
+                        if hasattr(tmp_model, "angle_branch") and tmp_model.angle_branch is not None:
+                            mm = tmp_model.angle_branch.diff_method
+                            if hasattr(mm, "cell_size") and mm.cell_size is not None:
+                                abs_key = int(mm.cell_size)
+                            elif hasattr(mm, "cell_size_angle") and mm.cell_size_angle is not None:
+                                abs_key = int(mm.cell_size_angle)
+                        elif hasattr(tmp_model, "diff_method"):
+                            mm = tmp_model.diff_method
+                            if hasattr(mm, "cell_size") and mm.cell_size is not None:
+                                abs_key = int(mm.cell_size)
+                            elif hasattr(mm, "cell_size_angle") and mm.cell_size_angle is not None:
+                                abs_key = int(mm.cell_size_angle)
+                    except Exception as e:
+                        print(f"Warning: could not extract absolute mask size for coeff={coeff}: {e}")
+
+                # Run simulation and store results under the absolute key
+                loss = __run_simulation(**kwargs)
+                loss_dict["mask_init_coeff"][abs_key] = loss
+
+            # Print results for mask_init_coeff
+            print("\nResults for mask_init_coeff:")
+            for abs_key, result in loss_dict["mask_init_coeff"].items():
+                print(f"Absolute mask size: {abs_key}, Loss: {result}")
+
+            # Ensure dt_string_for_save and save_plots are defined
+            dt_string_for_save = kwargs.get("dt_string_for_save", datetime.now().strftime("%d_%m_%Y_%H_%M"))
+            save_plots = kwargs["simulation_commands"].get("SAVE_PLOTS", False)
+
+            # Plot results for mask_init_coeff
+            plot_title = "Performance vs. Mask Initial Coefficient"
+            plot_file = simulations_path / f"mask_init_coeff_results_{dt_string_for_save}.png"
+            plot_results(
+                x=list(loss_dict["mask_init_coeff"].keys()),
+                y=list(loss_dict["mask_init_coeff"].values()),
+                xlabel="Absolute Mask Cell Size",
+                ylabel="Loss",
+                title=plot_title,
+                save_path=plot_file if save_plots else None,
+            )
+            print(f"Plot saved to {plot_file}" if save_plots else "Plot not saved (save_plots=False)")
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
         if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:

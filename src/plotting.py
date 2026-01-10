@@ -196,3 +196,37 @@ def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=
     if save_to_file:
         fig.savefig(simulations_path + "_acc.pdf", transparent=True, bbox_inches='tight')
     fig.show()
+
+def plot_mask_init_coeff_results(results: dict, save_to_file: bool = False):
+    """
+    Plot the results for varying mask_init_coeff values.
+
+    Parameters
+    ----------
+    results : dict
+        A dictionary where keys are mask_init_coeff values and values are the corresponding losses.
+    save_to_file : bool, optional
+        Whether to save the plot to a file, by default False.
+    """
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    mask_coeffs = list(results.keys())
+    losses = list(results.values())
+
+    ax.plot(mask_coeffs, losses, marker='o', linestyle='-', color='b', label='Loss')
+    ax.set_xlabel('Mask Initial Coefficient')
+    ax.set_ylabel('Loss')
+    ax.set_title('Loss vs. Mask Initial Coefficient')
+    ax.grid(True)
+    ax.legend()
+
+    if save_to_file:
+        base_plot_path = Path(__file__).parent.parent / "plots" / "simulations" / "MaskInitCoeff"
+        base_plot_path.mkdir(parents=True, exist_ok=True)
+        now = datetime.now()
+        dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
+        plot_file = base_plot_path / f"mask_init_coeff_plot_{dt_string_for_save}.png"
+        plt.savefig(plot_file)
+        print(f"Plot saved to {plot_file}")
+
+    plt.show()

@@ -68,7 +68,10 @@ class MUSIC(SubspaceMethod):
     For Near field - "angle", "range" and "angle, range" are the possible options.
     """
 
-    def __init__(self, system_model: SystemModel, estimation_parameter: str, model_order_estimation: str = None):
+    def __init__(self, system_model: SystemModel, estimation_parameter: str, model_order_estimation: str = None,
+                 init_cell_coeff: float = None, mask_decrease: bool = False,
+                 mask_decrease_interval: int = 20, mask_decrease_factor: float = 0.95,
+                 mask_min_cell_size: int = 1):
         """
 
         Args:
@@ -87,9 +90,17 @@ class MUSIC(SubspaceMethod):
         self.noise_subspace = None
         self.criterion = None
         self.separated_criterion = None
-
         self.__init_grid_params()
-        self.__init_cells(0.2)
+        # initial cell coefficient and mask configuration (can be provided by caller)
+        self._init_cell_coeff = init_cell_coeff
+        self.mask_decrease = mask_decrease
+        self.mask_decrease_interval = mask_decrease_interval
+        self.mask_decrease_factor = mask_decrease_factor
+        self.mask_min_cell_size = mask_min_cell_size
+
+        # default init coeff can be overridden by external configuration via attribute
+        init_coeff = self._init_cell_coeff
+        self.__init_cells(init_coeff if init_coeff is not None else 0.2)
         self.__init_criteria()
         self.__init_search_grid()
 
@@ -135,25 +146,28 @@ class MUSIC(SubspaceMethod):
         self.set_search_grid()
 
     def adjust_cell_size(self):
+        # Respect external configuration for mask decrease
+        if not getattr(self, "mask_decrease", False):
+            return
+
+        def shrink_and_fix(value):
+            # apply multiplicative shrink and enforce min and oddness
+            new_val = max(int(value * getattr(self, "mask_decrease_factor", 0.95)), getattr(self, "mask_min_cell_size", 1))
+            if new_val % 2 == 0:
+                new_val = max(self.mask_min_cell_size, new_val - 1)
+            return new_val
+
         if self.estimation_params == "range":
-            if self.cell_size > 1:
-                self.cell_size = int(0.8 * self.cell_size)
-                if self.cell_size % 2 == 0:
-                    self.cell_size -= 1
+            if self.cell_size > self.mask_min_cell_size:
+                self.cell_size = shrink_and_fix(self.cell_size)
         elif self.estimation_params == "angle, range":
-            if self.cell_size_angle > 1:
-                self.cell_size_angle = int(0.95 * self.cell_size_angle)
-                if self.cell_size_angle % 2 == 0:
-                    self.cell_size_angle -= 1
-            if self.cell_size_range > 1:
-                self.cell_size_range = int(0.95 * self.cell_size_range)
-                if self.cell_size_range % 2 == 0:
-                    self.cell_size_range -= 1
+            if self.cell_size_angle > self.mask_min_cell_size:
+                self.cell_size_angle = shrink_and_fix(self.cell_size_angle)
+            if self.cell_size_range > self.mask_min_cell_size:
+                self.cell_size_range = shrink_and_fix(self.cell_size_range)
         elif self.estimation_params == "angle":
-            if self.cell_size > 1:
-                self.cell_size = int(0.95 * self.cell_size)
-                if self.cell_size % 2 == 0:
-                    self.cell_size -= 1
+            if self.cell_size > self.mask_min_cell_size:
+                self.cell_size = shrink_and_fix(self.cell_size)
 
     def get_inverse_spectrum(self, noise_subspace: torch.Tensor):
         """

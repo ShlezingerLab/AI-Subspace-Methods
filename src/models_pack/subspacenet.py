@@ -20,7 +20,10 @@ class SubspaceNet(ParentModel):
     def __init__(self, tau: int, diff_method: str = "root_music", train_loss_type: str="rmspe",
                  system_model: SystemModel=None, field_type: str="far", regularization: str=None, variant: str="small",
                   norm_layer: bool=True, psd_epsilon: float=1e-6, batch_norm: bool=False, skip_connection: bool=False,
-                  skip_connection_alpha: float=None, initialize_eigenregularization_weight: float=1e-1):
+                  skip_connection_alpha: float=None, initialize_eigenregularization_weight: float=1e-1,
+                  mask_init_cell_coeff: float = None, mask_decrease: bool = False,
+                  mask_decrease_interval: int = 20, mask_decrease_factor: float = 0.95,
+                  mask_min_cell_size: int = 1):
         """Initializes the SubspaceNet model.
 
         Args:
@@ -66,6 +69,13 @@ class SubspaceNet(ParentModel):
         self.__setup_norm_layer(norm_layer)
         self.__setup_batch_norm(batch_norm)
         self.__setup_skip_connection(skip_connection, skip_connection_alpha)
+
+        # maskpeak configuration (forwarded to MUSIC if used)
+        self.mask_init_cell_coeff = mask_init_cell_coeff
+        self.mask_decrease = mask_decrease
+        self.mask_decrease_interval = mask_decrease_interval
+        self.mask_decrease_factor = mask_decrease_factor
+        self.mask_min_cell_size = mask_min_cell_size
 
         # set model training parameters
         self.train_loss, self.validation_loss, self.test_loss, self.test_loss_separated = None, None, None, None
@@ -311,7 +321,8 @@ class SubspaceNet(ParentModel):
 
     def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC) and isinstance(self.train_loss, (RMSPELoss, CartesianLoss)):
-            if epoch % 20 == 0 and epoch != 0:
+            interval = getattr(self.diff_method, "mask_decrease_interval", 20)
+            if interval > 0 and epoch % interval == 0 and epoch != 0:
                 self.diff_method.adjust_cell_size()
                 print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
 
@@ -485,16 +496,25 @@ class SubspaceNet(ParentModel):
             elif diff_method.startswith("esprit"):
                 self.diff_method = ESPRIT(system_model=system_model, model_order_estimation=self.regularization)
             elif diff_method.endswith("music_1d"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle", model_order_estimation=self.regularization)
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle", model_order_estimation=self.regularization,
+                                         init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
+                                         mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
+                                         mask_min_cell_size=self.mask_min_cell_size)
             else:
                 raise Exception(f"SubspaceNet.set_diff_method:"
                                 f" Method {diff_method} is not defined for SubspaceNet in "
                                 f"{self.field_type} scenario")
         elif self.field_type == "near":
             if diff_method.endswith("music_2D"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation=self.regularization)
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="angle, range", model_order_estimation=self.regularization,
+                                         init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
+                                         mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
+                                         mask_min_cell_size=self.mask_min_cell_size)
             elif diff_method.endswith("music_1d"):
-                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range")
+                self.diff_method = MUSIC(system_model=system_model, estimation_parameter="range",
+                                         init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
+                                         mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
+                                         mask_min_cell_size=self.mask_min_cell_size)
             elif diff_method.endswith("beamformer"):
                 self.diff_method = Beamformer(system_model=system_model)
             else:

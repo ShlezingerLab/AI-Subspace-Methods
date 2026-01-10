@@ -228,6 +228,12 @@ def parse_arguments():
 
     parser.add_argument('-skip_first_step', "--skip_first_step", action="store_true", help='Skip first step', default=SKIP_FIRST_STEP)
     parser.add_argument('-skip_second_step', "--skip_second_step", action="store_true", help='Skip second step', default=SKIP_SECOND_STEP)
+    # Maskpeak / mask configuration for MUSIC (optional)
+    parser.add_argument('--mask_init_cell_coeff', type=float, help='Initial cell coefficient for maskpeak (float)', default=None)
+    parser.add_argument('--mask_decrease', action='store_true', help='Enable scheduled decreasing of mask (bool)', default=False)
+    parser.add_argument('--mask_decrease_interval', type=int, help='Epoch interval between mask decreases', default=20)
+    parser.add_argument('--mask_decrease_factor', type=float, help='Multiplicative factor for mask decrease', default=0.95)
+    parser.add_argument('--mask_min_cell_size', type=int, help='Minimum allowed mask cell size (odd enforced)', default=1)
 
     return parser.parse_args()
 
@@ -256,6 +262,12 @@ if __name__ == "__main__":
         "regularization": None if args.regularization == "None" else args.regularization,
         "variant": args.variant,
         "initialize_eigenregularization_weight": args.eigenregularization_weight,  # initial value for eigenregularization weight
+        # maskpeak configuration forwarded to DCDMUSIC / SubspaceNet / MUSIC
+        "mask_init_cell_coeff": args.mask_init_cell_coeff,
+        "mask_decrease": args.mask_decrease,
+        "mask_decrease_interval": args.mask_decrease_interval,
+        "mask_decrease_factor": args.mask_decrease_factor,
+        "mask_min_cell_size": args.mask_min_cell_size,
     }
     training_params = {
         "samples_size": args.sample_size,

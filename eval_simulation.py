@@ -38,7 +38,8 @@ scenario_dict = {
     # "eta": [0.0, 0.02, 0.04, 0.06, 0.08, 0.1],
     # "M": [2, 3, 4, 5, 6, 7],
     "true_range_test": list(range(20, 110, 20)),  # in wavelengths
-    # "samples_size": [128, 1024, 4096, 16384],
+    "samples_size": [128, 1024, 4096, 16384],
+    # "mask_init_cell_coeff": [0.1, 0.2, 0.3, 0.4, 0.5],  # Add values to iterate over
 }
 
 simulation_commands = {
@@ -96,6 +97,12 @@ elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["regularization"] = None # aic, mdl, threshold, None
     model_config["model_params"]["variant"] = "small"  # big, small
     model_config["model_params"]["norm_layer"] = True
+    # maskpeak / mask configuration forwarded to DCD-MUSIC -> SubspaceNet -> MUSIC
+    model_config["model_params"]["mask_init_cell_coeff"] = None
+    model_config["model_params"]["mask_decrease"] = False
+    model_config["model_params"]["mask_decrease_interval"] = 20
+    model_config["model_params"]["mask_decrease_factor"] = 0.95
+    model_config["model_params"]["mask_min_cell_size"] = 1
 
 training_params = {
     "samples_size": 1000,
