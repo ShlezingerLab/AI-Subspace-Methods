@@ -299,7 +299,7 @@ def run_simulation(**kwargs):
             
             # For dataset size variation, use the same test dataset for all experiments
             # Use the second dataset size to determine test dataset size (or a fixed reference)
-            test_dataset_size = 1000
+            test_dataset_size = 1024
             print(f"Using fixed test dataset size: {test_dataset_size}")
             
             # Create/load test dataset once before the loop

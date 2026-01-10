@@ -50,7 +50,7 @@ simulation_commands = {
     "EVALUATE_MODE": True, # if true, a test will be performed
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
     "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
-    "PLOT_ACC_RESULTS": True,  # if True, the accuracy results of evaluation will be plotted
+    "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
 

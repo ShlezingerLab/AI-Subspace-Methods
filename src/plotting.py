@@ -108,8 +108,6 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         ax.set_xlabel("Number Of Sources")
     elif test == "samples_size":
         ax.set_xlabel("Dataset Size")
-        ax.set_xticks(list(test_values))
-        ax.set_xscale("log")
     ax.set_ylabel(f"RMSPE [{units}]")
     # ax.set_title("Overall RMSPE loss")
     if tested_param == "Angle":
@@ -120,6 +118,9 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
     if tested_param == "Distance":
         ax.set_title("Range RMSPE loss")
     ax.set_xticks(list(test_values))
+    if test == "samples_size":
+        ax.set_xscale("log", base=2)
+        ax.set_xticks(list(test_values))
     fig.tight_layout()
     if save_to_file:
         if tested_param in ["Angle", "Distance"]:
