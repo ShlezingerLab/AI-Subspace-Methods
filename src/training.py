@@ -281,26 +281,36 @@ class Trainer:
         if load_model:
             checkpoint_path = self.final_model_checkpoint
             checkpoint = None
+            load_candidates = [checkpoint_path]
+            if isinstance(self.model, DCDMUSIC):
+                load_candidates.append(checkpoint_path.with_name(self.model.get_model_file_name(include_mask=False)))
+            if self.model.samples_size is not None:
+                load_candidates.append(checkpoint_path.with_name(self.model.get_model_file_name(include_size=False)))
+                if isinstance(self.model, DCDMUSIC):
+                    load_candidates.append(checkpoint_path.with_name(self.model.get_model_file_name(include_size=False, include_mask=False)))
 
-            try:
-                checkpoint = torch.load(str(checkpoint_path) + ".pt")
-            except FileNotFoundError:
-                # If not found and filename includes size suffix, try without it (backward compatibility)
-                if self.model.samples_size is not None:
-                    filename_without_size = self.model.get_model_file_name(include_size=False)
-                    fallback_path = checkpoint_path.parent / filename_without_size
-                    try:
-                        print(f"Model not found with size suffix, trying without: {fallback_path}.pt")
-                        checkpoint = torch.load(str(fallback_path) + ".pt")
-                        print(f"Loaded model from backward-compatible path: {fallback_path}.pt")
-                    except FileNotFoundError:
-                        print("Model not found in ", str(checkpoint_path) + ".pt")
-                        print("Also tried backward-compatible path: ", str(fallback_path) + ".pt")
-                        return None
-                else:
-                    print("Model not found in ", str(checkpoint_path) + ".pt")
-                    return None
-            
+            tried_paths = []
+            for candidate in dict.fromkeys(load_candidates):
+                try:
+                    checkpoint = torch.load(str(candidate) + ".pt")
+                    checkpoint_path = candidate
+                    break
+                except FileNotFoundError:
+                    tried_paths.append(f"{candidate}.pt")
+
+            if checkpoint is None:
+                print("Model not found. Tried: ", tried_paths)
+                return None
+
+            # Normalize checkpoint format and capture optional mask_init_cell_coeff
+            if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+                state_dict = checkpoint["state_dict"]
+            else:
+                state_dict = checkpoint
+
+            if isinstance(self.model, DCDMUSIC) and "mask_init_cell_coeff" in checkpoint:
+                self.model.mask_init_cell_coeff = checkpoint["mask_init_cell_coeff"]
+
             if isinstance(self.model, DCDMUSIC):
                 if self.training_objective == "angle":
                     # keep only angle branch weights
@@ -313,16 +323,15 @@ class Trainer:
                         raise ValueError(f"Missing keys: {missing_keys}")
                     if len(unexpected_keys) > 0:
                         raise ValueError(f"Unexpected keys: {unexpected_keys}")
-                    print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
+                    print("Model loaded successfully from ", str(checkpoint_path) + ".pt")
                     return
-            else:
-                try:
-                    self.model.load_state_dict(state_dict)
-                    print("Model loaded successfully from ", str(self.final_model_checkpoint) + ".pt")
-                except Exception as e:
-                    print("Error loading model from ", str(self.final_model_checkpoint) + ".pt")
-                    print(e)
-                    return None
+            try:
+                self.model.load_state_dict(state_dict)
+                print("Model loaded successfully from ", str(checkpoint_path) + ".pt")
+            except Exception as e:
+                print("Error loading model from ", str(checkpoint_path) + ".pt")
+                print(e)
+                return None
 
 
     def __plot_res(self):

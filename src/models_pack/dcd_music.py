@@ -168,10 +168,7 @@ class DCDMUSIC(ParentModel):
                             variant=self.variant, norm_layer=self.norm_layer, batch_norm=self.batch_norm,
                             skip_connection=self.skip_connection, skip_connection_alpha=self.skip_connection_alpha,
                             psd_epsilon=self.psd_epsilon,
-                                                             initialize_eigenregularization_weight=initialize_eigenregularization_weight,
-                                                             mask_init_cell_coeff=self.mask_init_cell_coeff, mask_decrease=self.mask_decrease,
-                                                             mask_decrease_interval=self.mask_decrease_interval, mask_decrease_factor=self.mask_decrease_factor,
-                                                             mask_min_cell_size=self.mask_min_cell_size)
+                            initialize_eigenregularization_weight=initialize_eigenregularization_weight,)
         self.load_angle_branch(load_state)
 
     def __init_range_branch(self, load_state: bool, diff_method: str):
@@ -193,27 +190,34 @@ class DCDMUSIC(ParentModel):
 
     def __load_branch(self, load_state: bool, branch: str, ext_path: str = None):
         if load_state:
+            state_dict = None
+            load_path = None
             if ext_path is not None:
-                path = ext_path
+                load_candidates = [ext_path]
             else:
-                path = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
-                                    self.get_model_file_name())
-            try:
-                state_dict = torch.load(path + ".pt", map_location=self.device, weights_only=True)
-            except FileNotFoundError:
-                # Try backward-compatible path (without size suffix) if samples_size is set
-                if ext_path is None and self.samples_size is not None:
-                    path_without_size = os.path.join(Path(__file__).parent.parent.parent, "data", "weights", self._get_name(), "final_models",
-                                                    self.get_model_file_name(include_size=False))
-                    try:
-                        print(f"DCDMUSIC.__load_branch: Model not found with size suffix, trying without: {path_without_size}.pt")
-                        state_dict = torch.load(path_without_size + ".pt", map_location=self.device, weights_only=True)
-                        print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from backward-compatible path: {path_without_size}")
-                    except FileNotFoundError:
-                        raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path} or {path_without_size}")
-                else:
-                    raise FileNotFoundError(f"DCDMUSIC.__init_{branch}_branch: Model state not found in {path}")
-            
+                base_dir = Path(__file__).parent.parent.parent / "data" / "weights" / self._get_name() / "final_models"
+                load_candidates = [
+                    base_dir / self.get_model_file_name(),
+                    base_dir / self.get_model_file_name(include_mask=False),
+                ]
+                if self.samples_size is not None:
+                    load_candidates.append(base_dir / self.get_model_file_name(include_size=False))
+                    load_candidates.append(base_dir / self.get_model_file_name(include_size=False, include_mask=False))
+
+            tried_paths = []
+            for candidate in dict.fromkeys(load_candidates):
+                try:
+                    state_dict = torch.load(str(candidate) + ".pt", map_location=self.device, weights_only=True)
+                    load_path = candidate
+                    break
+                except FileNotFoundError:
+                    tried_paths.append(f"{candidate}.pt")
+
+            if state_dict is None:
+                raise FileNotFoundError(
+                    f"DCDMUSIC.__init_{branch}_branch: Model state not found. Tried: {tried_paths}"
+                )
+
             if branch == "angle":
                 state_dict = {k: v for k, v in state_dict.items() if k.startswith("angle_branch")}
             elif branch == "range":
@@ -222,8 +226,22 @@ class DCDMUSIC(ParentModel):
                 raise ValueError(f"DCDMUSIC.__load_branch: Unknown branch {branch}")
             self.load_state_dict(state_dict, strict=False)
             if ext_path is None:
-                print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {path}")
+                print(f"DCDMUSIC.__init_{branch}_branch: Model state loaded from {load_path}")
         return self.angle_branch if branch == "angle" else self.range_branch
+
+    def get_model_file_name(self, include_size: bool = True, include_mask: bool = True):
+        """Extend ParentModel naming to encode mask_init_cell_coeff (with fallback support).
+
+        Args:
+            include_size: Preserve dataset size suffix behavior.
+            include_mask: Whether to append mask_init_cell_coeff to the filename.
+        """
+        filename = super().get_model_file_name(include_size=include_size)
+        if include_mask and self.mask_init_cell_coeff is not None:
+            filename += f"_mask={self.mask_init_cell_coeff}"
+            if self.mask_decrease:
+                filename += f"_maskdec_factor_interval={self.mask_decrease_factor:.2f}_{self.mask_decrease_interval}"
+        return filename
 
 
     def print_model_params(self):

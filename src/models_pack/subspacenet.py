@@ -321,10 +321,12 @@ class SubspaceNet(ParentModel):
 
     def adjust_diff_method_temperature(self, epoch):
         if isinstance(self.diff_method, MUSIC) and isinstance(self.train_loss, (RMSPELoss, CartesianLoss)):
-            interval = getattr(self.diff_method, "mask_decrease_interval", 20)
-            if interval > 0 and epoch % interval == 0 and epoch != 0:
-                self.diff_method.adjust_cell_size()
-                print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
+            adjust_flag = getattr(self.diff_method, "mask_decrease", False)
+            if adjust_flag:
+                interval = getattr(self.diff_method, "mask_decrease_interval", 20)
+                if interval > 0 and epoch % interval == 0 and epoch != 0:
+                    self.diff_method.adjust_cell_size()
+                    print(f"Model temepartue updated --> {self.get_diff_method_temperature()}")
 
     def get_diff_method_temperature(self):
         if isinstance(self.diff_method, MUSIC):

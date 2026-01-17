@@ -17,18 +17,18 @@ from src.models import ModelGenerator
 
 # default values for the argparse
 number_sensors = 15
-number_sources = "2,8"
+number_sources = "2"
 number_snapshots = 100
-snr = -10
+snr = 10
 field_type = "Near"
 signal_type = "narrowband"
-signal_nature = "coherent"
+signal_nature = "non-coherent"
 err_loc_sv = 0.0
 wavelength = 1
 tau = 8
-sample_size = 40000
+sample_size = 4096
 batch_size = 32
-epochs = 100
+epochs = 10
 optimizer = "Adam"
 scheduler = "ReduceLROnPlateau"
 learning_rate = 0.01
@@ -36,10 +36,10 @@ weight_decay = 1e-9
 step_size = 10
 gamma = 0.5
 diff_method = ("esprit", "music_1d")
-regularization = "aic"
+regularization = "mdl"
 variant = "small"
 wandb_flag = False
-SKIP_FIRST_STEP = False
+SKIP_FIRST_STEP = True
 SKIP_SECOND_STEP = False
 initialize_eigenregularization_weight = 1e-4  # initial value for eigenregularization weight
 skip_connection_alpha = 1e-6
@@ -143,7 +143,13 @@ def train_dcd_music(*args, **kwargs):
                                    "regularization": MODEL_PARAMS.get("regularization"),
                                    "variant": MODEL_PARAMS.get("variant"),
                                    "initialize_eigenregularization_weight": MODEL_PARAMS.get("initialize_eigenregularization_weight", 1e-1),
-                                   "skip_connection_alpha": skip_connection_alpha})
+                                   "skip_connection_alpha": skip_connection_alpha,
+                                   "mask_init_cell_coeff": MODEL_PARAMS.get("mask_init_cell_coeff", 0.2),
+                                   "mask_decrease": MODEL_PARAMS.get("mask_decrease", True),
+                                   "mask_decrease_interval": MODEL_PARAMS.get("mask_decrease_interval", 10),
+                                   "mask_decrease_factor": MODEL_PARAMS.get("mask_decrease_factor", 0.95),
+                                   "mask_min_cell_size": MODEL_PARAMS.get("mask_min_cell_size", 1),
+                                   })
     model_config.set_samples_size(samples_size)  # Set samples_size for checkpoint naming
     model_config.set_model()
     model_config.model.switch_train_mode()
@@ -173,7 +179,7 @@ def train_dcd_music(*args, **kwargs):
     trainingparams.update({"training_objective": "range",
                             "learning_rate": TRAINING_PARAMS["learning_rate"]})
     trainingparams.update({"epochs": 0 if skip_second_step else TRAINING_PARAMS["epochs"]})
-    model.init_model_train_params(init_cell_size=0.2)   
+    model.init_model_train_params(init_cell_size=model.mask_init_cell_coeff if not model.use_gt else model.mask_init_cell_coeff/5)   
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
                             use_wandb=TRAINING_PARAMS["use_wandb"],
@@ -186,7 +192,7 @@ def train_dcd_music(*args, **kwargs):
                            "learning_rate": TRAINING_PARAMS["learning_rate"] / 50})
     trainingparams.update({"epochs": TRAINING_PARAMS["epochs"]})
     model.init_model_train_params(init_eigenregularization_weight=initialize_eigenregularization_weight * 10,
-                                   init_cell_size=0.2)
+                                   init_cell_size=model.mask_init_cell_coeff)
     model.switch_train_mode()
     trainer = Trainer(model=model, training_params=trainingparams, show_plots=True)
     model = trainer.train(train_dataloader, valid_dataloader,
@@ -229,9 +235,9 @@ def parse_arguments():
     parser.add_argument('-skip_first_step', "--skip_first_step", action="store_true", help='Skip first step', default=SKIP_FIRST_STEP)
     parser.add_argument('-skip_second_step', "--skip_second_step", action="store_true", help='Skip second step', default=SKIP_SECOND_STEP)
     # Maskpeak / mask configuration for MUSIC (optional)
-    parser.add_argument('--mask_init_cell_coeff', type=float, help='Initial cell coefficient for maskpeak (float)', default=None)
+    parser.add_argument('--mask_init_cell_coeff', type=float, help='Initial cell coefficient for maskpeak (float)', default=0.5)
     parser.add_argument('--mask_decrease', action='store_true', help='Enable scheduled decreasing of mask (bool)', default=False)
-    parser.add_argument('--mask_decrease_interval', type=int, help='Epoch interval between mask decreases', default=20)
+    parser.add_argument('--mask_decrease_interval', type=int, help='Epoch interval between mask decreases', default=10)
     parser.add_argument('--mask_decrease_factor', type=float, help='Multiplicative factor for mask decrease', default=0.95)
     parser.add_argument('--mask_min_cell_size', type=int, help='Minimum allowed mask cell size (odd enforced)', default=1)
 

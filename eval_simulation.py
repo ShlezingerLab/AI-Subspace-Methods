@@ -37,9 +37,9 @@ scenario_dict = {
     # "T": [10, 20, 30, 50, 70, 100],
     # "eta": [0.0, 0.02, 0.04, 0.06, 0.08, 0.1],
     # "M": [2, 3, 4, 5, 6, 7],
-    "true_range_test": list(range(20, 110, 20)),  # in wavelengths
-    "samples_size": [128, 1024, 4096, 16384],
-    # "mask_init_cell_coeff": [0.1, 0.2, 0.3, 0.4, 0.5],  # Add values to iterate over
+    # "true_range_test": list(range(20, 110, 20)),  # in wavelengths
+    # "samples_size": [128, 1024, 4096, 16384],
+    "mask_init_cell_coeff":[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],  # Add values to iterate over
 }
 
 simulation_commands = {
@@ -51,7 +51,7 @@ simulation_commands = {
     "SAVE_MODEL": False, # if true, the model will be saved to a file
     "EVALUATE_MODE": True, # if true, a test will be performed
     "PLOT_RESULTS": True,  # if True, the learning curves will be plotted
-    "PLOT_LOSS_RESULTS": True,  # if True, the RMSE results of evaluation will be plotted
+    "PLOT_LOSS_RESULTS": False,  # if True, the RMSE results of evaluation will be plotted
     "PLOT_ACC_RESULTS": False,  # if True, the accuracy results of evaluation will be plotted
     "SAVE_PLOTS": True,  # if True, the plots will be saved to the results folder
 }
@@ -60,8 +60,8 @@ system_model_params = {
     "N": 15,  # number of antennas
     "M": 2,  # number of sources
     "T": 100,  # number of snapshots
-    "snr": 0,  # if defined, values in scenario_dict will be ignored
-    "field_type": "full",  # Near, Far
+    "snr": 10,  # if defined, values in scenario_dict will be ignored
+    "field_type": "near",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
     "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
@@ -69,7 +69,7 @@ system_model_params = {
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
     "doa_range": 60, # The range of the DOA values [-doa_range, doa_range]
     "doa_resolution": .5, # The resolution of the DOA values in degrees
-    "max_range_ratio_to_limit": 1.0, # The ratio of the maximum range in respect to the Fraunhofer distance
+    "max_range_ratio_to_limit": 0.5, # The ratio of the maximum range in respect to the Fraunhofer distance
     "range_resolution": 1, # The resolution of the range values in meters
     "wavelength": 1, # The carrier wavelength of the signal in meters
 }
@@ -100,13 +100,13 @@ elif model_config.get("model_type") == "DCD-MUSIC":
     # maskpeak / mask configuration forwarded to DCD-MUSIC -> SubspaceNet -> MUSIC
     model_config["model_params"]["mask_init_cell_coeff"] = None
     model_config["model_params"]["mask_decrease"] = False
-    model_config["model_params"]["mask_decrease_interval"] = 20
-    model_config["model_params"]["mask_decrease_factor"] = 0.95
+    model_config["model_params"]["mask_decrease_interval"] = 5
+    model_config["model_params"]["mask_decrease_factor"] = 0.9
     model_config["model_params"]["mask_min_cell_size"] = 1
 
 training_params = {
-    "samples_size": 1000,
-    "train_test_ratio": 1,
+    "samples_size": 4096,
+    "train_test_ratio": 0.1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 32,
     "epochs": 0,
@@ -136,20 +136,20 @@ evaluation_params = {
                     "model_name": "DCD-MUSIC",
                     "tau": 8,
                     "diff_method": ("esprit", "music_1d"),
-                    "regularization": "aic",    
-                    "skip_connection": False,
+                    "regularization": "mdl",    
+                    "skip_connection": True,
                     "psd_epsilon": 1e-6,
                       },
-        "NFSubspaceNet": {
-                        "model_name": "SubspaceNet",
-                        "tau": 8,
-                        "diff_method": "music_2D",
-                        "train_loss_type": "music_spectrum",
-                        "field_type": "near",
-                        "regularization": "aic",
-                        "skip_connection": True,
-                        "psd_epsilon": 1e-6,
-                        },
+        # "NFSubspaceNet": {
+        #                 "model_name": "SubspaceNet",
+        #                 "tau": 8,
+        #                 "diff_method": "music_2D",
+        #                 "train_loss_type": "music_spectrum",
+        #                 "field_type": "near",
+        #                 "regularization": "aic",
+        #                 "skip_connection": True,
+        #                 "psd_epsilon": 1e-6,
+        #                 },
     },
     "augmented_methods": [
         # ("SubspaceNet", "beamformer", {"tau": 8, "diff_method": "music_2D", "train_loss_type": "music_spectrum", "field_type": "near"}),
@@ -158,7 +158,7 @@ evaluation_params = {
     ],
     "subspace_methods": [
         # "CCRB",
-        "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
+        # "2D-MUSIC" if regularization_methods is None else f"2D-MUSIC({regularization_methods})",
         #  "Beamformer",
         # "CS_Estimator",
         # "ESPRIT",

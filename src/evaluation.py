@@ -114,37 +114,36 @@ def get_model(params: dict, system_model_params: SystemModelParams, model_name: 
         .set_model()
     )
     model = model_config.model
-    path = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name())
-    try:
-        state_dict = torch.load(path+".pt", map_location=device, weights_only=True)
-        if "model_state_dict" in state_dict:
-            state_dict = state_dict["model_state_dict"]
-        # remove all keys that ends with .eigen_threshold
-        state_dict = {k: v for k, v in state_dict.items() if not k.endswith(".eigen_threshold")}
-        model.load_state_dict(state_dict)
-        print(f"get_model: {model._get_name()}'s weights loaded succesfully from {path}")
-    #     if isinstance(model, DCDMUSIC):
-    #         model._load_state_for_angle_extractor()
-    except FileNotFoundError as e:
-        # Try backward-compatible path (without size suffix) if samples_size is set
-        if model.samples_size is not None:
-            path_without_size = os.path.join(Path(__file__).parent.parent, "data", "weights", model._get_name(), "final_models", model.get_model_file_name(include_size=False))
-            try:
-                print(f"Model not found with size suffix, trying without: {path_without_size}.pt")
-                state_dict = torch.load(path_without_size+".pt", map_location=device, weights_only=True)
-                if "model_state_dict" in state_dict:
-                    state_dict = state_dict["model_state_dict"]
-                state_dict = {k: v for k, v in state_dict.items() if not k.endswith(".eigen_threshold")}
-                model.load_state_dict(state_dict)
-                print(f"get_model: {model._get_name()}'s weights loaded succesfully from backward-compatible path: {path_without_size}")
-            except FileNotFoundError:
-                print("####################################")
-                print(f"Model not found in {path}.pt")
-                print(f"Also tried backward-compatible path: {path_without_size}.pt")
-                raise e
+    base_dir = Path(__file__).parent.parent / "data" / "weights" / model._get_name() / "final_models"
+    load_candidates = [base_dir / model.get_model_file_name()]
+    if isinstance(model, DCDMUSIC):
+        load_candidates.append(base_dir / model.get_model_file_name(include_mask=False))
+    if model.samples_size is not None:
+        if isinstance(model, DCDMUSIC):
+            load_candidates.append(base_dir / model.get_model_file_name(include_size=False, include_mask=True))
+            load_candidates.append(base_dir / model.get_model_file_name(include_size=False, include_mask=False))
         else:
-            print("####################################")
-            raise e
+            load_candidates.append(base_dir / model.get_model_file_name(include_size=False))
+    state_dict = None
+    tried_paths = []
+    load_path = None
+    for candidate in dict.fromkeys(load_candidates):
+        try:
+            checkpoint = torch.load(str(candidate) + ".pt", map_location=device, weights_only=True)
+            load_path = candidate
+            state_dict = checkpoint.get("model_state_dict", checkpoint)
+            break
+        except FileNotFoundError:
+            tried_paths.append(f"{candidate}.pt")
+
+    if state_dict is None:
+        print("####################################")
+        print(f"Model not found. Tried: {tried_paths}")
+        raise FileNotFoundError(f"Model weights not found for candidates: {tried_paths}")
+
+    state_dict = {k: v for k, v in state_dict.items() if not k.endswith(".eigen_threshold")}
+    model.load_state_dict(state_dict)
+    print(f"get_model: {model._get_name()}'s weights loaded succesfully from {load_path}")
         # print("####################################")
         # try:
         #     print(f"Model {model_name}'s weights not found in final_models, trying to load from temp weights.")
