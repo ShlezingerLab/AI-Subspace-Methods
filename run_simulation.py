@@ -260,6 +260,7 @@ def run_simulation(**kwargs):
     default_eta = kwargs["system_model_params"]["eta"]
     default_m = kwargs["system_model_params"]["M"]
     default_samples_size = kwargs["training_params"]["samples_size"]
+    default_true_range_test = kwargs["training_params"]["true_range_test"]
     for key, value in kwargs["scenario_dict"].items():
         if key == "SNR":
             loss_dict["SNR"] = {snr: None for snr in value}
@@ -363,12 +364,26 @@ def run_simulation(**kwargs):
             # Clean up
             if "preloaded_test_dataset" in kwargs:
                 del kwargs["preloaded_test_dataset"]
+        if key == "true_range_test":
+            wavelength = kwargs["system_model_params"]["wavelength"]
+            # Create display keys as multiples of wavelength
+            display_keys = {tr: tr * wavelength for tr in value}
+            loss_dict["true_range_test"] = {display_keys[tr]: None for tr in value}
+            print(f"Testing true_range_test values: {[f'{tr * wavelength:.2f}λ' for tr in value]}")
+            for true_range in value:
+                kwargs["training_params"]["true_range_test"] = [true_range] * kwargs["system_model_params"]["M"]
+                loss = __run_simulation(**kwargs)
+                # Store with wavelength-scaled display key
+                display_key = true_range * wavelength
+                loss_dict["true_range_test"][display_key] = loss
+                kwargs["training_params"]["true_range_test"] = default_true_range_test
     if None not in list(next(iter(loss_dict.values())).values()):
         print_loss_results_from_simulation(loss_dict)
         if kwargs["simulation_commands"]["PLOT_LOSS_RESULTS"]:
             plot_results(loss_dict, kwargs["system_model_params"]["field_type"],
                          plot_acc=kwargs["simulation_commands"]["PLOT_ACC_RESULTS"],
-                         save_to_file=kwargs["simulation_commands"]["SAVE_PLOTS"])
+                         save_to_file=kwargs["simulation_commands"]["SAVE_PLOTS"],
+                         system_model_params=kwargs["system_model_params"])
 
     return loss_dict
 

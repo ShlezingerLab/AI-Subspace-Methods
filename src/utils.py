@@ -516,6 +516,8 @@ def print_loss_results_from_simulation(loss_results: dict):
         for test_value, results in value_dict.items():
             if test == "SNR":
                 print(f"{test} = {test_value} [dB]: ")
+            elif test == "true_range_test":
+                print(f"{test} = {test_value:.2f}λ [m]: ")
             else:
                 print(f"{test} = {test_value}: ")
             for method, loss in results.items():

@@ -307,7 +307,7 @@ class MUSIC(SubspaceMethod):
         for batch in range(batch_size):
             music_spectrum = self.music_spectrum[batch].cpu().detach().numpy().squeeze()
             # Find spectrum peaks
-            peaks_tmp = sc.signal.find_peaks(music_spectrum, threshold=0.0)[0]
+            peaks_tmp = sc.signal.find_peaks(music_spectrum, threshold=1e-6)[0]
             if len(peaks_tmp) < source_number:
                 warnings.warn(f"MUSIC._peak_finder_1d: No peaks were found! taking max values instead.")
                 # random_peaks = np.random.randint(0, search_space.shape[0], (source_number - peaks_tmp.shape[0],))
@@ -316,7 +316,15 @@ class MUSIC(SubspaceMethod):
                 peaks_tmp = np.concatenate((peaks_tmp, random_peaks))
             # Sort the peak by their amplitude
             sorted_peaks = peaks_tmp[np.argsort(music_spectrum[peaks_tmp])[::-1]]
-            peaks[batch] = torch.from_numpy(sorted_peaks[0:source_number]).to(self.device)
+            selected_peaks = sorted_peaks[0:source_number]
+            # Check if the selected peaks are not less than 50 % from the maximum value
+            max_value = np.max(music_spectrum)
+            for idx, peak in enumerate(selected_peaks):
+                if music_spectrum[peak] < 0.5 * max_value:
+                    print(f"MUSIC._peak_finder_1d: Selected peak at index {peak} with value {music_spectrum[peak]:.4f} is less than 50% of the maximum value {max_value:.4f}. Replacing with maximum value index.")
+                    selected_peaks[idx] = np.argmax(music_spectrum)
+                    
+            peaks[batch] = torch.from_numpy(selected_peaks).to(self.device)
         if not self.training:
             # if the model is not in training mode, return the peaks
             if peaks.dim() == 1:

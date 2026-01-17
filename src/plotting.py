@@ -10,7 +10,7 @@ import numpy as np
 from src.utils import plot_styles, parse_loss_results_for_plotting
 import warnings
 
-def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_to_file: bool = False):
+def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_to_file: bool = False, system_model_params: dict = None):
     """
     Plot the results of the simulation.
     The dict could be with several scenarios, each with different SNR values, or with different number of snapshots,
@@ -31,13 +31,15 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
     steering_noise_plot_path = base_plot_path / "SteeringNoise"
     number_of_sources_plot_path = base_plot_path / "NumberOfSources"
     dataset_size_plot_path = base_plot_path / "DatasetSize"
+    true_range_test_plot_path = base_plot_path / "TrueRangeTest"
     base_plot_path.mkdir(parents=True, exist_ok=True)
     snr_plot_path.mkdir(parents=True, exist_ok=True)
     snapshots_plot_path.mkdir(parents=True, exist_ok=True)
     steering_noise_plot_path.mkdir(parents=True, exist_ok=True)
     number_of_sources_plot_path.mkdir(parents=True, exist_ok=True)
     dataset_size_plot_path.mkdir(parents=True, exist_ok=True)
-    plot_paths = {"SNR": snr_plot_path, "T": snapshots_plot_path, "eta": steering_noise_plot_path, "M": number_of_sources_plot_path, "samples_size": dataset_size_plot_path}
+    true_range_test_plot_path.mkdir(parents=True, exist_ok=True)
+    plot_paths = {"SNR": snr_plot_path, "T": snapshots_plot_path, "eta": steering_noise_plot_path, "M": number_of_sources_plot_path, "samples_size": dataset_size_plot_path, "true_range_test": true_range_test_plot_path}
 
 
     dt_string_for_save = now.strftime("%d_%m_%Y_%H_%M")
@@ -45,31 +47,33 @@ def plot_results(loss_dict: dict, field_type: str, plot_acc: bool = False, save_
     for scenario, dict_values in loss_dict.items():
         plot_path = os.path.join(plot_paths[scenario], dt_string_for_save)
         if field_type == "far":
-            plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc, system_model_params=system_model_params)
         else:
-            plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc)
+            plot_test_results(scenario, dict_values, plot_path, save_to_file=save_to_file, plot_acc=plot_acc, system_model_params=system_model_params)
+            if scenario == "true_range_test":
+                plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=plot_acc, system_model_params=system_model_params)
             # plot_test_results(scenario, dict_values, plot_path, tested_param="Angle", save_to_file=save_to_file, plot_acc=False)
             # plot_test_results(scenario, dict_values, plot_path, tested_param="Distance", save_to_file=save_to_file, plot_acc=False)
     return
 
 
 def plot_test_results(test: str, res: dict, simulations_path: str, tested_param: str="Overall",
-                      save_to_file=False, plot_acc: bool=False):
+                      save_to_file=False, plot_acc: bool=False, system_model_params: dict=None):
     """
     The input dict is a nested dict - the first level is for the snr values, the second level is for the methods,
     and the third level is for the loss values or accuracy.
     For example: res = {10: {"MUSIC": {"Overall": 0.1, "Accuracy": 0.9}, "RootMUSIC": {"Overall": 0.2, "Accuracy": 0.8}}
     Or, for near filed scenrio: res = {10: {"MUSIC": {"Overall": 0.1, "Angle": 0.2, "Distance": 0.3, "Accuracy": 0.9},
     "RootMUSIC": {"Overall": 0.2, "Angle": 0.3, "Distance": 0.4, "Accuracy": 0.8}}
-    The possible test are: "SNR", "T", "eta", "M", "samples_size"
+    The possible test are: "SNR", "T", "eta", "M", "samples_size", "true_range_test"
     """
     if tested_param not in ["Overall", "Angle", "Distance"]:
         raise ValueError(f"Unknown tested_param: {tested_param}")
-    plot_rmse(test, res, simulations_path, tested_param, save_to_file, plot_acc=plot_acc)
+    plot_rmse(test, res, simulations_path, tested_param, save_to_file, plot_acc=plot_acc, system_model_params=system_model_params)
 
 
 def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Overall",
-              save_to_file=False, plot_acc: bool=False):
+              save_to_file=False, plot_acc: bool=False, system_model_params: dict=None):
     if tested_param == "Angle":
         units = "rad"
     else:
@@ -82,7 +86,23 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
     if test == "SNR":
         warnings.warn("SNR values in the plot are multiplied by 2, due to an error in the signal creation")
         test_values = np.array(list(res.keys())) * 2
+    if test == "true_range_test":
+        test_values = np.array(list(res.keys()))
     plt_res, plt_acc = parse_loss_results_for_plotting(res, tested_param)
+    
+    # Calculate Fresnel and Fraunhofer limits for true_range_test
+    fresnel_dist = None
+    fraunhofer_dist = None
+    if test == "true_range_test" and system_model_params is not None:
+        from src.system_model import SystemModel, SystemModelParams
+        # Create a temporary system model to calculate distances
+        temp_params = SystemModelParams()
+        for key, value in system_model_params.items():
+            temp_params.set_parameter(key, value)
+        sys_model = SystemModel(temp_params)
+        fraunhofer_dist = sys_model.fraunhofer * system_model_params["wavelength"]
+        fresnel_dist = sys_model.fresnel * system_model_params["wavelength"]
+    
     for method, loss_ in plt_res.items():
         # if loss_.get("Accuracy") is not None and method != "TransMUSIC" and test == "SNR":
         #     label = method + f": {np.mean(loss_['Accuracy']) * 100:.2f} %"
@@ -98,6 +118,13 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
     # decrease the size of the legend
     ax.legend(fontsize='x-small', loc="best")
     ax.grid()
+    
+    # Add Fresnel and Fraunhofer limits for true_range_test
+    if test == "true_range_test" and fresnel_dist is not None and fraunhofer_dist is not None:
+        ax.axvline(x=fresnel_dist, color='orange', linestyle='--', linewidth=2, label=f'Fresnel: {fresnel_dist:.2f}λ')
+        ax.axvline(x=fraunhofer_dist, color='red', linestyle='--', linewidth=2, label=f'Fraunhofer: {fraunhofer_dist:.2f}λ')
+        ax.legend(fontsize='x-small', loc="best")
+    
     if test == "SNR":
         ax.set_xlabel("SNR [dB]")
     elif test == "T":
@@ -108,6 +135,8 @@ def plot_rmse(test: str, res: dict, simulations_path: str, tested_param: str="Ov
         ax.set_xlabel("Number Of Sources")
     elif test == "samples_size":
         ax.set_xlabel("Dataset Size")
+    elif test == "true_range_test":
+        ax.set_xlabel("Range [$\lambda$ (m)]")
     ax.set_ylabel(f"RMSPE [{units}]")
     # ax.set_title("Overall RMSPE loss")
     if tested_param == "Angle":
@@ -159,6 +188,8 @@ def plot_acc_results(test, test_values, plt_res, simulations_path, save_to_file=
         ax.set_xlabel("Number Of Sources")
     elif test == "samples_size":
         ax.set_xlabel("Dataset Size")
+    elif test == "true_range_test":
+        ax.set_xlabel("Range [λ (m)]")
     ax.set_ylabel("Accuracy [%]")
     # ax.set_title("Accuracy")
     ax.set_yscale("linear")

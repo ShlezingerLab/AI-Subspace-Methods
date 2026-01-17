@@ -37,12 +37,13 @@ scenario_dict = {
     # "T": [10, 20, 30, 50, 70, 100],
     # "eta": [0.0, 0.02, 0.04, 0.06, 0.08, 0.1],
     # "M": [2, 3, 4, 5, 6, 7],
-    "samples_size": [128, 1024, 4096, 16384],
+    "true_range_test": list(range(20, 110, 20)),  # in wavelengths
+    # "samples_size": [128, 1024, 4096, 16384],
 }
 
 simulation_commands = {
     "SAVE_TO_FILE": False, # if true, the logs will be saved to a file
-    "CREATE_DATA": False, # if true, a new dataset will be created
+    "CREATE_DATA": True, # if true, a new dataset will be created
     "SAVE_DATASET": True, # if true, the dataset will be saved to a file
     "LOAD_MODEL": False, # if true, the model will be loaded from a file
     "TRAIN_MODEL": False, # if true, the model will be trained
@@ -57,17 +58,17 @@ simulation_commands = {
 system_model_params = {
     "N": 15,  # number of antennas
     "M": 2,  # number of sources
-    "T": 50,  # number of snapshots
+    "T": 100,  # number of snapshots
     "snr": 0,  # if defined, values in scenario_dict will be ignored
-    "field_type": "near",  # Near, Far
+    "field_type": "full",  # Near, Far
     "signal_type": "Narrowband",  # Narrowband, broadband
-    "signal_nature": "coherent",  # if defined, values in scenario_dict will be ignored
+    "signal_nature": "non-coherent",  # if defined, values in scenario_dict will be ignored
     "eta": 0.0,  # steering vector uniform error variance with respect to the wavelength.
     "bias": 0, # steering vector bias error
     "sv_noise_var": 0.0, # steering vector addative gaussian error noise variance
     "doa_range": 60, # The range of the DOA values [-doa_range, doa_range]
     "doa_resolution": .5, # The resolution of the DOA values in degrees
-    "max_range_ratio_to_limit": 0.5, # The ratio of the maximum range in respect to the Fraunhofer distance
+    "max_range_ratio_to_limit": 1.0, # The ratio of the maximum range in respect to the Fraunhofer distance
     "range_resolution": 1, # The resolution of the range values in meters
     "wavelength": 1, # The carrier wavelength of the signal in meters
 }
@@ -97,7 +98,7 @@ elif model_config.get("model_type") == "DCD-MUSIC":
     model_config["model_params"]["norm_layer"] = True
 
 training_params = {
-    "samples_size": 1024,
+    "samples_size": 1000,
     "train_test_ratio": 1,
     "training_objective": "angle, range",  # angle, range, source_estimation
     "batch_size": 32,
@@ -118,18 +119,18 @@ training_params = {
 regularization_methods = "aic" # None, aic, mdl, threshold
 evaluation_params = {
     "models": {
-        "TransMUSIC": {
-                        "model_name": "TransMUSIC",
-                    },
-        "DeepCNN": {
-            "model_name": "DeepCNN",
-        },
+        # "TransMUSIC": {
+        #                 "model_name": "TransMUSIC",
+        #             },
+        # "DeepCNN": {
+        #     "model_name": "DeepCNN",
+        # },
         "DCD-MUSIC": {
                     "model_name": "DCD-MUSIC",
                     "tau": 8,
                     "diff_method": ("esprit", "music_1d"),
-                    # "regularization": "aic",    
-                    "skip_connection": True,
+                    "regularization": "aic",    
+                    "skip_connection": False,
                     "psd_epsilon": 1e-6,
                       },
         "NFSubspaceNet": {
@@ -138,7 +139,7 @@ evaluation_params = {
                         "diff_method": "music_2D",
                         "train_loss_type": "music_spectrum",
                         "field_type": "near",
-                        # "regularization": "aic",
+                        "regularization": "aic",
                         "skip_connection": True,
                         "psd_epsilon": 1e-6,
                         },
@@ -191,6 +192,7 @@ def parse_arguments():
     parser.add_argument('-step', '--step_size', type=int, help='Step size', default=None)
     parser.add_argument('-g', '--gamma', type=float, help='Gamma', default=None)
     parser.add_argument('-w', '--wandb', action="store_true", help='Use wandb', default=training_params["use_wandb"])
+    parser.add_argument('-true_r_test', '--true_range_test', type=float, help='True range for test dataset', default=None)
 
     parser.add_argument('-t', '--train', action="store_true", help='Train model', default=simulation_commands["TRAIN_MODEL"])
     parser.add_argument('-no_t', "--no_train", action="store_false", help='Do not train model', dest='train')
@@ -264,6 +266,8 @@ if __name__ == "__main__":
         training_params["gamma"] = args.gamma
     if args.wandb is not None:
         training_params["use_wandb"] = args.wandb
+    if args.true_range_test is not None:
+        training_params["true_range_test"] = args.true_range_test
 
     simulation_commands["TRAIN_MODEL"] = args.train
     simulation_commands["EVALUATE_MODE"] = args.eval
